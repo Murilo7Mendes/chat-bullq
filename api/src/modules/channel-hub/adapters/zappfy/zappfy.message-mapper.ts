@@ -1,0 +1,622 @@
+import { Injectable } from '@nestjs/common';
+import { ChannelType } from '@prisma/client';
+import {
+  NormalizedInboundMessage,
+  NormalizedOutboundMessage,
+  MessageContentType,
+  StatusUpdate,
+  TemplateButton,
+} from '../../ports/types';
+
+@Injectable()
+export class ZappfyMessageMapper {
+  normalizeInbound(event: any): NormalizedInboundMessage | null {
+    const msg = event?.message;
+    if (!msg) return null;
+
+    const chatid = msg.chatid || '';
+    const isGroup = chatid.endsWith('@g.us');
+    const phone = chatid.replace(/@s\.whatsapp\.net|@g\.us/g, '');
+    const isEcho = msg.fromMe === true;
+
+    // contactName resolution:
+    //  - Group: chat name (the group's name).
+    //  - 1-on-1 inbound: senderName = the contact who sent it = correct.
+    //  - 1-on-1 echo (fromMe=true): senderName is OURSELVES (the connected
+    //    WhatsApp), NOT the contact. Using it here used to overwrite the
+    //    contact's profileName with the operator's own name every time they
+    //    replied from their phone. Fall back to chat name only.
+    const resolvedContactName = isGroup
+      ? event?.chat?.name || msg.chatName
+      : isEcho
+        ? event?.chat?.name
+        : msg.senderName || event?.chat?.name;
+
+    const result: NormalizedInboundMessage = {
+      externalMessageId: msg.messageid || msg.id || '',
+      externalContactId: chatid,
+      contactName: resolvedContactName,
+      contactPhone: isGroup ? undefined : phone,
+      channelType: ChannelType.WHATSAPP_ZAPPFY,
+      timestamp: new Date(msg.messageTimestamp || Date.now()),
+      type: this.resolveContentType(msg),
+      content: this.extractContent(msg),
+      isForwarded: typeof msg.content === 'object' && !!msg.content?.contextInfo?.isForwarded,
+      isGroup,
+      isEcho,
+      senderName: isGroup
+        ? (msg.senderName?.trim() || msg.pushName?.trim() || msg.sender_pn?.replace(/@.+/, '') || undefined)
+        : (isEcho ? (msg.senderName?.trim() || msg.pushName?.trim() || undefined) : undefined),
+      rawPayload: event,
+    };
+
+    const replyTo = this.extractReply(msg);
+    if (replyTo) result.replyTo = replyTo;
+
+    return result;
+  }
+
+  /**
+   * Reply nativo (usuário citou uma mensagem no app do WhatsApp).
+   *
+   * O id da citada chega em dois lugares e o Zappfy nem sempre preenche os
+   * dois: `msg.quoted` (mais frequente) e `contextInfo.stanzaID` — atenção ao
+   * **D maiúsculo**, que é como o provider serializa. Líamos `stanzaId` e por
+   * isso nenhum reply de WhatsApp aparecia na quote box do inbox.
+   *
+   * `senderName` fica de fora de propósito: o payload só traz o JID do
+   * participante (`@lid`), que não é exibível. Quem resolve o nome é o
+   * processor, a partir da mensagem citada já persistida.
+   */
+  private extractReply(msg: any): { externalMessageId: string; previewText?: string } | null {
+    const ctx = typeof msg?.content === 'object' ? msg.content?.contextInfo : null;
+    const externalMessageId =
+      (typeof msg?.quoted === 'string' && msg.quoted.trim()) ||
+      ctx?.stanzaID ||
+      ctx?.stanzaId ||
+      null;
+    if (!externalMessageId) return null;
+
+    const previewText = this.previewFromQuoted(ctx?.quotedMessage);
+    return previewText ? { externalMessageId, previewText } : { externalMessageId };
+  }
+
+  /**
+   * O `quotedMessage` é o envelope cru do WhatsApp: uma chave por tipo de
+   * mensagem. Extraímos só o suficiente pra linha de preview da quote box.
+   */
+  private previewFromQuoted(quoted: any): string | undefined {
+    if (!quoted || typeof quoted !== 'object') return undefined;
+
+    const text =
+      quoted.conversation ||
+      quoted.extendedTextMessage?.text ||
+      quoted.imageMessage?.caption ||
+      quoted.videoMessage?.caption ||
+      quoted.documentMessage?.caption;
+    if (typeof text === 'string' && text.trim()) return text.trim();
+
+    if (quoted.imageMessage) return '[imagem]';
+    if (quoted.videoMessage || quoted.ptvMessage) return '[vídeo]';
+    if (quoted.audioMessage) return '[áudio]';
+    if (quoted.stickerMessage) return '[figurinha]';
+    if (quoted.documentMessage) {
+      const name = quoted.documentMessage.fileName;
+      return typeof name === 'string' && name.trim() ? name.trim() : '[documento]';
+    }
+    if (quoted.locationMessage) return '[localização]';
+    if (quoted.contactMessage) {
+      const name = quoted.contactMessage.displayName;
+      return typeof name === 'string' && name.trim() ? `Contato: ${name.trim()}` : '[contato]';
+    }
+    if (quoted.pollCreationMessage || quoted.pollCreationMessageV3) {
+      const name = quoted.pollCreationMessage?.name || quoted.pollCreationMessageV3?.name;
+      return typeof name === 'string' && name.trim() ? `Enquete: ${name.trim()}` : '[enquete]';
+    }
+    return undefined;
+  }
+
+  /**
+   * Uazapi/Zappfy send status updates in at least two shapes:
+   *  A) { state: 'delivered', event: { MessageIDs: [...], Timestamp, Type } }
+   *  B) { event: 'messages.update', message: { messageid, status: 'READ' | ack:3, timestamp } }
+   *  C) { messages: [{ id, ack: 3 }] }  (baileys-style numeric ack)
+   *
+   * We accept all of them and convert to our StatusUpdate.
+   */
+  normalizeStatus(event: any): StatusUpdate | null {
+    if (!event) return null;
+
+    const tsToDate = (ts: any): Date => {
+      const num = typeof ts === 'string' ? parseInt(ts, 10) : Number(ts);
+      if (!num || isNaN(num)) return new Date();
+      return new Date(num > 9999999999 ? num : num * 1000);
+    };
+
+    const numericAckMap: Record<number, StatusUpdate['status']> = {
+      1: 'sent',
+      2: 'delivered',
+      3: 'read',
+      4: 'read',
+      5: 'failed',
+    };
+
+    const stringStatusMap: Record<string, StatusUpdate['status']> = {
+      sent: 'sent',
+      delivered: 'delivered',
+      read: 'read',
+      played: 'read',
+      failed: 'failed',
+      error: 'failed',
+      pending: 'sent',
+    };
+
+    // Shape A
+    const statusEvent = event?.event;
+    if (statusEvent && Array.isArray(statusEvent.MessageIDs) && statusEvent.MessageIDs.length > 0) {
+      const stateStr = String(event?.state || statusEvent?.Type || '').toLowerCase();
+      const status = stringStatusMap[stateStr];
+      if (status) {
+        return {
+          externalMessageId: String(statusEvent.MessageIDs[0]),
+          status,
+          timestamp: tsToDate(statusEvent?.Timestamp),
+        };
+      }
+    }
+
+    // Shape B
+    const bMsg = event?.message;
+    if (bMsg && (bMsg.messageid || bMsg.id)) {
+      const stateStr = String(bMsg.status || event?.state || '').toLowerCase();
+      const numeric = typeof bMsg.ack === 'number' ? bMsg.ack : undefined;
+      const status =
+        numeric !== undefined ? numericAckMap[numeric] : stringStatusMap[stateStr];
+      if (status) {
+        return {
+          externalMessageId: String(bMsg.messageid || bMsg.id),
+          status,
+          timestamp: tsToDate(bMsg.timestamp || bMsg.messageTimestamp),
+        };
+      }
+    }
+
+    // Shape C
+    if (Array.isArray(event?.messages)) {
+      const first = event.messages.find((m: any) => m?.id && (m.ack != null || m.status));
+      if (first) {
+        const numeric = typeof first.ack === 'number' ? first.ack : undefined;
+        const status =
+          numeric !== undefined
+            ? numericAckMap[numeric]
+            : stringStatusMap[String(first.status || '').toLowerCase()];
+        if (status) {
+          return {
+            externalMessageId: String(first.id),
+            status,
+            timestamp: tsToDate(first.timestamp),
+          };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  denormalize(
+    message: NormalizedOutboundMessage,
+    contactExternalId: string,
+  ): { endpoint: string; payload: Record<string, any> } {
+    const number = contactExternalId.replace(/@s\.whatsapp\.net|@g\.us/g, '');
+    // Uazapi/Zappfy aceita `replyid` (id da mensagem citada) em
+    // /send/text e /send/media. Quando o cliente recebe, o WhatsApp
+    // renderiza a "bolha de resposta" nativa em cima da nossa mensagem.
+    // Sem isso, o reply seria apenas textual e perderia o link visual.
+    const replyId = message.replyTo?.externalMessageId;
+    const withReply = <T extends Record<string, any>>(p: T): T =>
+      replyId ? ({ ...p, replyid: replyId } as T) : p;
+
+    // Menção em grupo: o Zappfy espera `mentions` como string separada por
+    // vírgula, ou o literal 'all'. Só faz sentido em grupo — mandar em 1:1 é
+    // ignorado pelo provider, mas evitamos poluir o payload.
+    const rawMentions = message.content.mentions;
+    const isGroupTarget = contactExternalId.endsWith('@g.us');
+    const mentions =
+      isGroupTarget && rawMentions
+        ? rawMentions === 'all'
+          ? 'all'
+          : [...new Set(rawMentions.map((m) => String(m).replace(/\D/g, '')))]
+              .filter(Boolean)
+              .join(',') || undefined
+        : undefined;
+    const withMentions = <T extends Record<string, any>>(p: T): T =>
+      mentions ? ({ ...p, mentions } as T) : p;
+    const withExtras = <T extends Record<string, any>>(p: T): T =>
+      withMentions(withReply(p));
+
+    switch (message.type) {
+      case MessageContentType.TEXT:
+        return {
+          endpoint: '/send/text',
+          payload: withExtras({ number, text: message.content.text, delay: 1000 }),
+        };
+
+      // A legenda da mídia vai no campo `text` — `caption` o provider aceita
+      // sem reclamar e simplesmente descarta, que era por que a imagem
+      // chegava sempre muda no WhatsApp do cliente.
+      case MessageContentType.IMAGE:
+        return {
+          endpoint: '/send/media',
+          payload: withExtras({
+            number,
+            file: message.content.mediaUrl,
+            type: 'image',
+            text: message.content.caption || '',
+          }),
+        };
+
+      case MessageContentType.AUDIO:
+        return {
+          endpoint: '/send/media',
+          payload: withReply({
+            number,
+            file: message.content.mediaUrl,
+            // "ptt" renders as a native voice note on WhatsApp. "audio" would
+            // render as a forwarded audio file, which is wrong UX for a
+            // message the user just recorded in the app.
+            type: 'ptt',
+          }),
+        };
+
+      case MessageContentType.VIDEO:
+        return {
+          endpoint: '/send/media',
+          payload: withExtras({
+            number,
+            file: message.content.mediaUrl,
+            type: 'video',
+            text: message.content.caption || '',
+          }),
+        };
+
+      case MessageContentType.DOCUMENT:
+        return {
+          endpoint: '/send/media',
+          payload: withExtras({
+            number,
+            file: message.content.mediaUrl,
+            type: 'document',
+            // `docName`, não `filename`: com o nome errado o provider ignora
+            // e o documento chega com o nome interno do nosso upload.
+            docName: message.content.fileName || '',
+            text: message.content.caption || '',
+          }),
+        };
+
+      case MessageContentType.STICKER:
+        return {
+          endpoint: '/send/media',
+          payload: withReply({
+            number,
+            file: message.content.mediaUrl,
+            type: 'sticker',
+          }),
+        };
+
+      case MessageContentType.LOCATION:
+        return {
+          endpoint: '/send/location',
+          payload: withReply({
+            number,
+            latitude: String(message.content.latitude),
+            longitude: String(message.content.longitude),
+            name: message.content.text || '',
+            address: '',
+          }),
+        };
+
+      case MessageContentType.REACTION:
+        // Reaction já É um reply intrínseco a uma msg específica via
+        // targetMessageId — replyid não se aplica aqui.
+        return {
+          endpoint: '/message/react',
+          payload: {
+            chatid: contactExternalId,
+            messageid: message.content.reaction?.targetMessageId,
+            reaction: message.content.reaction?.emoji,
+          },
+        };
+
+      default:
+        return {
+          endpoint: '/send/text',
+          payload: withReply({ number, text: message.content.text || '' }),
+        };
+    }
+  }
+
+  private resolveContentType(msg: any): MessageContentType {
+    const type = (msg.messageType || '').toLowerCase();
+    if (type.includes('text') || type === 'conversation' || type === 'extendedtextmessage')
+      return MessageContentType.TEXT;
+    if (type.includes('image')) return MessageContentType.IMAGE;
+    if (type.includes('audio') || type.includes('ptt')) return MessageContentType.AUDIO;
+    if (type.includes('video')) return MessageContentType.VIDEO;
+    if (type.includes('document')) return MessageContentType.DOCUMENT;
+    if (type.includes('sticker')) return MessageContentType.STICKER;
+    if (type.includes('location')) return MessageContentType.LOCATION;
+    if (type.includes('reaction')) return MessageContentType.REACTION;
+    // PTV = "picture-in-picture video", o vídeo redondo do WhatsApp. O nome
+    // não carrega "video", então precisa de check próprio.
+    if (type.includes('ptv')) return MessageContentType.VIDEO;
+    // A resposta de um botão é só o rótulo que o usuário clicou — vira texto,
+    // que é o que o front sabe renderizar. Precisa vir ANTES do check de
+    // 'template' e do de 'button' abaixo.
+    if (type.includes('templatebuttonreply')) return MessageContentType.TEXT;
+    if (type.includes('template')) return MessageContentType.TEMPLATE;
+    // Contato (vCard), enquete e álbum não têm tipo próprio no enum. Viram
+    // texto legível em extractContent em vez de bolha vazia.
+    if (type.includes('contact')) return MessageContentType.TEXT;
+    if (type.includes('poll')) return MessageContentType.TEXT;
+    if (type.includes('album')) return MessageContentType.TEXT;
+    // Convite de grupo: o "conteúdo" é o link, mas o que interessa na
+    // conversa é o nome do grupo pra onde a pessoa foi convidada.
+    if (type.includes('groupinvite')) return MessageContentType.TEXT;
+    if (type.includes('button') || type.includes('list')) return MessageContentType.INTERACTIVE;
+    return MessageContentType.TEXT;
+  }
+
+  private extractContent(msg: any): NormalizedInboundMessage['content'] {
+    const raw = msg.content;
+    const type = (msg.messageType || '').toLowerCase();
+
+    // Zappfy sends content as plain string for Conversation type
+    if (typeof raw === 'string') {
+      return { text: raw };
+    }
+
+    const content = raw || {};
+
+    if (type.includes('text') || type === 'conversation' || type === 'extendedtextmessage') {
+      return { text: content.text || content.conversation || '' };
+    }
+    if (type.includes('image')) {
+      return {
+        mediaUrl: content.url || content.mediaUrl,
+        mimeType: content.mimetype,
+        fileSize: content.fileLength,
+        caption: content.caption,
+      };
+    }
+    if (type.includes('audio') || type.includes('ptt')) {
+      return {
+        mediaUrl: content.url || content.mediaUrl,
+        mimeType: content.mimetype,
+        fileSize: content.fileLength,
+      };
+    }
+    if (type.includes('video')) {
+      return {
+        mediaUrl: content.url || content.mediaUrl,
+        mimeType: content.mimetype,
+        fileSize: content.fileLength,
+        caption: content.caption,
+      };
+    }
+    if (type.includes('document')) {
+      return {
+        mediaUrl: content.url || content.mediaUrl,
+        mimeType: content.mimetype,
+        fileName: content.fileName,
+        fileSize: content.fileLength,
+        caption: content.caption,
+      };
+    }
+    if (type.includes('sticker')) {
+      return {
+        mediaUrl: content.url || content.mediaUrl,
+        mimeType: content.mimetype,
+      };
+    }
+    if (type.includes('location')) {
+      return {
+        latitude: content.degreesLatitude,
+        longitude: content.degreesLongitude,
+        text: content.name || content.address,
+      };
+    }
+    if (type.includes('reaction')) {
+      return {
+        reaction: {
+          emoji: content.text || msg.text || '',
+          targetMessageId: msg.reaction || content.key?.ID || '',
+        },
+      };
+    }
+    if (type.includes('ptv')) {
+      // PTV entrega a URL em `URL` (maiúsculo), diferente das outras mídias.
+      return {
+        mediaUrl: content.URL || content.url || content.mediaUrl,
+        mimeType: content.mimetype || 'video/mp4',
+        fileSize: content.fileLength,
+      };
+    }
+    if (type.includes('contact')) {
+      return { text: this.formatContact(content, msg) };
+    }
+    if (type.includes('groupinvite')) {
+      const groupName = (content.groupName || '').trim();
+      return {
+        text: groupName
+          ? `Convite para o grupo: ${groupName}`
+          : content.caption || msg.text || '[convite de grupo]',
+      };
+    }
+    if (type.includes('poll')) {
+      return { text: this.formatPoll(content, msg) };
+    }
+    if (type.includes('album')) {
+      return { text: this.formatAlbum(content) };
+    }
+    if (type.includes('templatebuttonreply')) {
+      // O rótulo clicado vem no `text` de topo; `buttonOrListid` é o id.
+      return { text: msg.text || msg.buttonOrListid || '' };
+    }
+    if (type.includes('template')) {
+      return {
+        text: msg.text || '',
+        template: {
+          templateType: 'hydrated',
+          text: msg.text || '',
+          buttons: this.extractTemplateButtons(content),
+        },
+      };
+    }
+    // Botões e listas do canal não-oficial (menu de chatbot e a resposta de
+    // quem clicou). Precisa vir depois dos tipos mais específicos, porque
+    // "templatebuttonreply" também casaria aqui.
+    if (type.includes('button') || type.includes('list')) {
+      return this.formatInteractive(content, msg);
+    }
+
+    // Fallback: o Zappfy quase sempre manda uma versão legível da mensagem no
+    // `text` de topo, mesmo para tipos que não mapeamos. Usar isso antes de
+    // desistir evita a bolha "[Unsupported message type]" na conversa.
+    return { text: content.text || msg.text || '[Mensagem não suportada]' };
+  }
+
+  /**
+   * Menu de botões/lista e a resposta de quem clicou.
+   *
+   * Quando é o MENU, mostramos a pergunta e as opções — assim o operador
+   * entende do que a resposta seguinte está falando. Quando é a RESPOSTA,
+   * basta o rótulo escolhido (e `buttonOrListid` guarda o id pra automação).
+   */
+  private formatInteractive(content: any, msg: any): NormalizedInboundMessage['content'] {
+    const chosen =
+      content.Response?.SelectedDisplayText ||
+      content.selectedDisplayText ||
+      content.title ||
+      content.selectedButtonId;
+    const isResponse = (msg.messageType || '').toLowerCase().includes('response');
+
+    if (isResponse && chosen) {
+      return {
+        interactive: { type: 'button', buttonId: msg.buttonOrListid || undefined },
+        text: String(chosen),
+      };
+    }
+
+    const question = (content.contentText || content.description || msg.text || '').trim();
+    const options: string[] = [
+      // botões: buttons[].buttonText.displayText
+      ...(content.buttons ?? []).map(
+        (b: any) => b?.buttonText?.displayText || b?.displayText,
+      ),
+      // lista: sections[].rows[].title
+      ...(content.sections ?? []).flatMap((s: any) =>
+        (s?.rows ?? []).map((r: any) => r?.title),
+      ),
+    ]
+      .filter(Boolean)
+      .map((o: string) => `• ${o}`);
+
+    const text = [question, ...options].filter(Boolean).join('\n');
+    return {
+      interactive: { type: content.sections ? 'list' : 'button' },
+      text: text || '[menu]',
+    };
+  }
+
+  /**
+   * vCard -> "Contato: Fulano" + telefones, um por linha.
+   */
+  private formatContact(content: any, msg: any): string {
+    const vcard: string = content.vcard || '';
+    const name =
+      content.displayName ||
+      vcard.match(/^FN:(.+)$/m)?.[1]?.trim() ||
+      'sem nome';
+    // O TEL vem com ou sem o prefixo `itemN.` dependendo de quem exportou o
+    // vCard: "item1.TEL;waid=...:+55 45 8806-1780" ou "TEL;type=CELL;...".
+    const phones = [...vcard.matchAll(/^(?:item\d*\.)?TEL[^:]*:(.+)$/gm)]
+      .map((m) => m[1].trim())
+      .filter(Boolean);
+    if (!vcard && !content.displayName) return msg.text || '[Contato]';
+    return [`Contato: ${name}`, ...phones].join('\n');
+  }
+
+  /**
+   * Enquete -> pergunta + opções com bullet.
+   */
+  private formatPoll(content: any, msg: any): string {
+    // Voto (PollUpdateMessage): o provider entrega a opção escolhida em
+    // `vote`, no topo da mensagem. Sem isso a bolha ficava vazia — e o voto
+    // é justamente a informação que interessa na conversa.
+    const vote = typeof msg?.vote === 'string' ? msg.vote.trim() : '';
+    if (vote) return `Votou: ${vote}`;
+
+    const poll =
+      content.pollCreationMessageV3 ||
+      content.pollCreationMessage ||
+      content.pollCreationMessageV2 ||
+      {};
+    const question = (poll.name || msg.text || '').trim();
+    const options = (poll.options || [])
+      .map((o: any) => o?.optionName)
+      .filter(Boolean)
+      .map((o: string) => `• ${o}`);
+    return [`Enquete: ${question}`, ...options].join('\n');
+  }
+
+  /**
+   * Álbum é só o cabeçalho — as mídias chegam depois, cada uma no seu evento.
+   */
+  private formatAlbum(content: any): string {
+    const imgs = Number(content.expectedImageCount) || 0;
+    const vids = Number(content.expectedVideoCount) || 0;
+    const parts: string[] = [];
+    if (imgs) parts.push(`${imgs} ${imgs === 1 ? 'imagem' : 'imagens'}`);
+    if (vids) parts.push(`${vids} ${vids === 1 ? 'vídeo' : 'vídeos'}`);
+    return `Álbum com ${parts.join(' e ') || 'mídias'}`;
+  }
+
+  /**
+   * Achata os hydratedButtons do template do WhatsApp no shape que o front
+   * já renderiza (`content.template.buttons`).
+   */
+  private extractTemplateButtons(content: any): TemplateButton[] {
+    const hydrated =
+      content?.Format?.HydratedFourRowTemplate?.hydratedButtons ||
+      content?.hydratedTemplate?.hydratedButtons ||
+      content?.hydratedButtons ||
+      [];
+    return hydrated
+      .map((entry: any) => {
+        const b = entry?.HydratedButton ?? entry;
+        if (b?.QuickReplyButton) {
+          return {
+            type: 'quick_reply',
+            title: b.QuickReplyButton.displayText || '',
+            payload: b.QuickReplyButton.ID,
+          };
+        }
+        if (b?.UrlButton) {
+          return {
+            type: 'url',
+            title: b.UrlButton.displayText || '',
+            url: b.UrlButton.URL || b.UrlButton.url,
+          };
+        }
+        if (b?.CallButton) {
+          return {
+            type: 'call',
+            title: b.CallButton.displayText || '',
+            payload: b.CallButton.phoneNumber,
+          };
+        }
+        return null;
+      })
+      .filter((b: TemplateButton | null): b is TemplateButton => !!b);
+  }
+}
