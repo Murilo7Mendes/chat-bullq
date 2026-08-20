@@ -24,6 +24,7 @@ enum AgentStatus {
 enum ChannelType {
   WHATSAPP_OFFICIAL
   WHATSAPP_ZAPPFY
+  WHATSAPP_EVOLUTION
   INSTAGRAM
   GMAIL
 }
@@ -462,10 +463,25 @@ model Contact {
   tags          ContactTag[]
   aiMemories    AiAgentMemory[]
   cards         Card[]           @relation("CardContact")
+  cnpjs         ContactCnpj[]
 
   @@index([organizationId, phone], name: "idx_contact_org_phone")
   @@index([organizationId, email], name: "idx_contact_org_email")
   @@map("contacts")
+}
+
+model ContactCnpj {
+  id         String   @id @default(cuid())
+  contactId  String   @map("contact_id")
+  cnpj       String
+  autoNotify Boolean  @default(false) @map("auto_notify")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, cnpj], name: "uq_contact_cnpj")
+  @@index([cnpj], name: "idx_contact_cnpj_lookup")
+  @@map("contact_cnpjs")
 }
 
 model ContactChannel {

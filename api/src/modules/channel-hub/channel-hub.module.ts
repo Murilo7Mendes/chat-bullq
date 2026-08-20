@@ -19,6 +19,9 @@ import { InstagramSyncAdapter } from './adapters/instagram/instagram.sync-adapte
 import { GmailModule } from './adapters/gmail/gmail.module';
 import { GmailInboundAdapter } from './adapters/gmail/gmail.inbound-adapter';
 import { GmailOutboundAdapter } from './adapters/gmail/gmail.outbound-adapter';
+import { EvolutionModule } from './adapters/evolution/evolution.module';
+import { EvolutionInboundAdapter } from './adapters/evolution/evolution.inbound-adapter';
+import { EvolutionOutboundAdapter } from './adapters/evolution/evolution.outbound-adapter';
 import { ChannelSyncOrchestrator } from './sync/channel-sync.orchestrator';
 import { ChannelSyncProcessor } from './sync/channel-sync.processor';
 import { CHANNEL_SYNC_QUEUE } from './sync/channel-sync.constants';
@@ -42,6 +45,7 @@ import { WebhookThrottleGuard } from './webhook-throttle.guard';
     WhatsAppOfficialModule,
     InstagramModule,
     GmailModule,
+    EvolutionModule,
     forwardRef(() => MessagingModule),
   ],
   controllers: [WebhookGatewayController, ChannelsController],
@@ -77,6 +81,8 @@ export class ChannelHubModule implements OnModuleInit {
     private readonly instagramSync: InstagramSyncAdapter,
     private readonly gmailInbound: GmailInboundAdapter,
     private readonly gmailOutbound: GmailOutboundAdapter,
+    private readonly evolutionInbound: EvolutionInboundAdapter,
+    private readonly evolutionOutbound: EvolutionOutboundAdapter,
   ) {}
 
   onModuleInit() {
@@ -84,6 +90,7 @@ export class ChannelHubModule implements OnModuleInit {
     this.registry.register(this.waOfficialInbound, this.waOfficialOutbound);
     this.registry.register(this.instagramInbound, this.instagramOutbound);
     this.registry.register(this.gmailInbound, this.gmailOutbound);
+    this.registry.register(this.evolutionInbound, this.evolutionOutbound);
     this.registry.registerHistorySync(this.zappfySync);
     this.registry.registerHistorySync(this.instagramSync);
   }

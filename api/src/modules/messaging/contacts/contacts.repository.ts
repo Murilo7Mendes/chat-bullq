@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../database/prisma.service';
+import { normalizeCnpj } from '../../vigia/vigia-link-extractor';
 
 @Injectable()
 export class ContactsRepository {
@@ -46,6 +47,7 @@ export class ContactsRepository {
       include: {
         channels: { include: { channel: { select: { id: true, type: true, name: true } } } },
         tags: { include: { tag: true } },
+        cnpjs: { orderBy: { createdAt: 'asc' } },
         conversations: {
           orderBy: { createdAt: 'desc' },
           take: 10,
@@ -55,6 +57,34 @@ export class ContactsRepository {
           },
         },
       },
+    });
+  }
+
+  async listCnpjs(contactId: string) {
+    return this.prisma.contactCnpj.findMany({ where: { contactId }, orderBy: { createdAt: 'asc' } });
+  }
+
+  async addCnpj(contactId: string, cnpj: string) {
+    const normalized = normalizeCnpj(cnpj);
+    return this.prisma.contactCnpj.upsert({
+      where: { uq_contact_cnpj: { contactId, cnpj: normalized } },
+      create: { contactId, cnpj: normalized, autoNotify: false },
+      update: {},
+    });
+  }
+
+  async updateCnpjAutoNotify(contactId: string, cnpj: string, autoNotify: boolean) {
+    const normalized = normalizeCnpj(cnpj);
+    return this.prisma.contactCnpj.update({
+      where: { uq_contact_cnpj: { contactId, cnpj: normalized } },
+      data: { autoNotify },
+    });
+  }
+
+  async removeCnpj(contactId: string, cnpj: string) {
+    const normalized = normalizeCnpj(cnpj);
+    return this.prisma.contactCnpj.delete({
+      where: { uq_contact_cnpj: { contactId, cnpj: normalized } },
     });
   }
 

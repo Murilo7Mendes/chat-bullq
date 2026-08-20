@@ -1,0 +1,2 @@
+-- AddValue
+ALTER TYPE "ChannelType" ADD VALUE 'WHATSAPP_EVOLUTION';

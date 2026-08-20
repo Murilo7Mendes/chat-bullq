@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { ContactsRepository } from './contacts.repository';
 import { UpdateContactDto } from './dto/update-contact.dto';
 
@@ -30,5 +30,25 @@ export class ContactsService {
   async remove(id: string, organizationId: string) {
     await this.findOne(id, organizationId);
     return this.repository.softDelete(id);
+  }
+
+  async listCnpjs(id: string, organizationId: string) {
+    await this.findOne(id, organizationId);
+    return this.repository.listCnpjs(id);
+  }
+
+  async addCnpj(id: string, organizationId: string, cnpj: string) {
+    await this.findOne(id, organizationId);
+    return this.repository.addCnpj(id, cnpj);
+  }
+
+  async updateCnpjAutoNotify(id: string, organizationId: string, cnpj: string, autoNotify: boolean) {
+    await this.findOne(id, organizationId);
+    return this.repository.updateCnpjAutoNotify(id, cnpj, autoNotify);
+  }
+
+  async removeCnpj(id: string, organizationId: string, cnpj: string) {
+    await this.findOne(id, organizationId);
+    return this.repository.removeCnpj(id, cnpj);
   }
 }

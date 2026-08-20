@@ -11,10 +11,12 @@ import {
   type WhatsAppTemplate,
 } from '@/features/channels/services/channels.service';
 import { ZappfyIcon, MetaIcon, InstagramIcon, GmailIcon } from '@/components/ui/icons';
+import { Zap as EvolutionIcon } from 'lucide-react';
 
 const channelIcons: Record<string, React.ElementType> = {
   WHATSAPP_ZAPPFY: ZappfyIcon,
   WHATSAPP_OFFICIAL: MetaIcon,
+  WHATSAPP_EVOLUTION: EvolutionIcon,
   INSTAGRAM: InstagramIcon,
   GMAIL: GmailIcon,
 };
@@ -22,6 +24,7 @@ const channelIcons: Record<string, React.ElementType> = {
 const channelLabels: Record<string, string> = {
   WHATSAPP_ZAPPFY: 'WhatsApp',
   WHATSAPP_OFFICIAL: 'WhatsApp Oficial',
+  WHATSAPP_EVOLUTION: 'WhatsApp (Evolution)',
   INSTAGRAM: 'Instagram',
   GMAIL: 'Gmail',
 };
@@ -114,7 +117,7 @@ export function NewConversationDialog({ open, onClose, onCreated }: Props) {
 
   const isGmail = channelType === 'GMAIL';
   const isOfficial = channelType === 'WHATSAPP_OFFICIAL';
-  const isZappfy = channelType === 'WHATSAPP_ZAPPFY';
+  const isZappfy = channelType === 'WHATSAPP_ZAPPFY' || channelType === 'WHATSAPP_EVOLUTION';
 
   const contactValid = isGmail ? email.trim().length > 3 : phone.trim().length >= 8;
   const messageValid = isOfficial

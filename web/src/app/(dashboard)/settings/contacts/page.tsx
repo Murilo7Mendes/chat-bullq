@@ -1,16 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
-import { Search, Users, MessageSquare, ExternalLink } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Search, Users, MessageSquare } from 'lucide-react';
 import { contactsService, type Contact } from '@/features/contacts/services/contacts.service';
+import { ContactDrawer } from '@/features/contacts/components/contact-drawer';
 import { useOrgId } from '@/hooks/use-org-query-key';
 import { ZappfyIcon, MetaIcon, InstagramIcon, GmailIcon } from '@/components/ui/icons';
 
 const channelIcons: Record<string, React.ElementType> = {
   WHATSAPP_ZAPPFY: ZappfyIcon,
   WHATSAPP_OFFICIAL: MetaIcon,
+  WHATSAPP_EVOLUTION: ZappfyIcon,
   INSTAGRAM: InstagramIcon,
   GMAIL: GmailIcon,
 };
@@ -18,6 +19,7 @@ const channelIcons: Record<string, React.ElementType> = {
 export default function ContactsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [drawerContact, setDrawerContact] = useState<Contact | null>(null);
   const orgId = useOrgId();
 
   const { data, isLoading } = useQuery({
@@ -30,6 +32,11 @@ export default function ContactsPage() {
 
   return (
     <div className="flex h-full flex-col min-h-0 min-w-0 p-6">
+      <ContactDrawer
+        open={!!drawerContact}
+        contact={drawerContact}
+        onClose={() => setDrawerContact(null)}
+      />
       <div className="mx-auto w-full max-w-5xl shrink-0">
         <div className="flex items-center justify-between">
           <div>
@@ -96,7 +103,11 @@ export default function ContactsPage() {
                 </tr>
               ) : (
                 contacts.map((contact) => (
-                  <tr key={contact.id} className="border-b border-zinc-50 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/50">
+                  <tr
+                    key={contact.id}
+                    onClick={() => setDrawerContact(contact)}
+                    className="cursor-pointer border-b border-zinc-50 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/50"
+                  >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">

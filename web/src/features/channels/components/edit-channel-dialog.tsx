@@ -207,5 +207,12 @@ function fieldsFor(type: Channel['type']): FieldDef[] {
       { key: 'sendMode', label: 'Modo de envio', placeholder: 'send ou draft', hint: '"send" envia direto; "draft" cria rascunho pra revisão humana', optional: true },
     ];
   }
+  if (type === 'WHATSAPP_EVOLUTION') {
+    return [
+      { key: 'instanceName', label: 'Nome da instância', placeholder: 'Ex: bullq-wa' },
+      { key: 'apiKey', label: 'API Key', placeholder: 'Chave global da Evolution API' },
+      { key: 'baseUrl', label: 'URL do servidor', placeholder: 'http://evolution:8080', optional: true },
+    ];
+  }
   return [];
 }

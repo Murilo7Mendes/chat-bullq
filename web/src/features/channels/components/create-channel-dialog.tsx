@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Loader2, X, Copy, Check } from 'lucide-react';
+import { Loader2, X, Copy, Check, Zap as EvolutionIcon } from 'lucide-react';
 import { channelsService, type ChannelType } from '../services/channels.service';
 import { ZappfyIcon, MetaIcon, InstagramIcon, GmailIcon } from '@/components/ui/icons';
 
@@ -37,6 +37,13 @@ const channelTypes: { value: ChannelType; label: string; icon: React.ElementType
     icon: GmailIcon,
     color: 'bg-zinc-50 dark:bg-zinc-800',
     description: 'Emails da caixa Google viram conversas — via polling',
+  },
+  {
+    value: 'WHATSAPP_EVOLUTION',
+    label: 'WhatsApp (Evolution)',
+    icon: EvolutionIcon,
+    color: 'bg-zinc-50 dark:bg-zinc-800',
+    description: 'Evolution API self-hosted — Baileys direto, sem custo por mensagem',
   },
 ];
 
@@ -71,10 +78,18 @@ const gmailSchema = z.object({
   draftMode: z.boolean().optional(),
 });
 
+const evolutionSchema = z.object({
+  name: z.string().min(1, 'Nome é obrigatório'),
+  instanceName: z.string().min(1, 'Nome da instância é obrigatório'),
+  apiKey: z.string().min(1, 'API Key é obrigatória'),
+  baseUrl: z.string().optional(),
+});
+
 type ZappfyFormData = z.infer<typeof zappfySchema>;
 type WaOfficialFormData = z.infer<typeof waOfficialSchema>;
 type InstagramFormData = z.infer<typeof instagramSchema>;
 type GmailFormData = z.infer<typeof gmailSchema>;
+type EvolutionFormData = z.infer<typeof evolutionSchema>;
 
 const inputCls = 'flex h-10 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm ring-offset-background placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100';
 const labelCls = 'text-sm font-medium text-zinc-700 dark:text-zinc-300';
@@ -113,6 +128,11 @@ export function CreateChannelDialog({ open, onClose, onCreated }: CreateChannelD
   const gmailForm = useForm<GmailFormData>({
     resolver: zodResolver(gmailSchema),
     defaultValues: { name: '', email: '', refreshToken: '', draftMode: false },
+  });
+
+  const evolutionForm = useForm<EvolutionFormData>({
+    resolver: zodResolver(evolutionSchema),
+    defaultValues: { name: '', instanceName: '', apiKey: '', baseUrl: '' },
   });
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
@@ -179,6 +199,13 @@ export function CreateChannelDialog({ open, onClose, onCreated }: CreateChannelD
       sendMode: data.draftMode ? 'draft' : 'send',
     });
 
+  const onSubmitEvolution = (data: EvolutionFormData) =>
+    submitChannel('WHATSAPP_EVOLUTION', data.name, {
+      instanceName: data.instanceName,
+      apiKey: data.apiKey,
+      ...(data.baseUrl?.trim() && { baseUrl: data.baseUrl.trim() }),
+    });
+
   const handleClose = () => {
     setStep('type');
     setSelectedType(null);
@@ -186,6 +213,7 @@ export function CreateChannelDialog({ open, onClose, onCreated }: CreateChannelD
     waForm.reset();
     igForm.reset();
     gmailForm.reset();
+    evolutionForm.reset();
     onClose();
   };
 
@@ -196,6 +224,7 @@ export function CreateChannelDialog({ open, onClose, onCreated }: CreateChannelD
     WHATSAPP_OFFICIAL: 'Configurar WhatsApp Official',
     INSTAGRAM: 'Configurar Instagram',
     GMAIL: 'Configurar Gmail',
+    WHATSAPP_EVOLUTION: 'Configurar Evolution API',
   };
 
   return (
@@ -272,6 +301,20 @@ export function CreateChannelDialog({ open, onClose, onCreated }: CreateChannelD
               Não precisa de webhook: os emails são buscados por polling (checagem periódica).
               O refresh_token é gerado autorizando o OAuth App da plataforma com os escopos
               gmail.readonly, gmail.send e gmail.modify.
+            </div>
+            <FormFooter isLoading={isLoading} onBack={() => setStep('type')} />
+          </form>
+        ) : selectedType === 'WHATSAPP_EVOLUTION' ? (
+          <form onSubmit={evolutionForm.handleSubmit(onSubmitEvolution)} className="mt-6 space-y-4">
+            <Field label="Nome do canal" placeholder="Ex: WhatsApp Evolution" error={evolutionForm.formState.errors.name?.message} {...evolutionForm.register('name')} />
+            <Field label="Nome da instância" placeholder="Ex: bullq-wa" error={evolutionForm.formState.errors.instanceName?.message} {...evolutionForm.register('instanceName')} />
+            <Field label="API Key" placeholder="Chave global da Evolution API" error={evolutionForm.formState.errors.apiKey?.message} {...evolutionForm.register('apiKey')} />
+            <Field label="URL do servidor" placeholder="http://evolution:8080" optional {...evolutionForm.register('baseUrl')} />
+            <WebhookUrl url={`${apiBaseUrl}/webhooks/WHATSAPP_EVOLUTION`} copied={copied} onCopy={() => handleCopyWebhook('WHATSAPP_EVOLUTION')} />
+            <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-3 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400">
+              Configure o webhook da instância na Evolution API:<br />
+              <code className="mt-1 block font-mono">POST /webhook/set/&#123;instanceName&#125;</code>
+              com <code className="font-mono">{"{ url, enabled: true, events: [\"MESSAGES_UPSERT\", \"MESSAGES_UPDATE\"] }"}</code>
             </div>
             <FormFooter isLoading={isLoading} onBack={() => setStep('type')} />
           </form>
