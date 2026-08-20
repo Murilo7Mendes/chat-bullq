@@ -6,6 +6,7 @@ import Redis from 'ioredis';
 import { PrismaService } from '../../database/prisma.service';
 import { VigiaImapService } from './vigia-imap.service';
 import { VigiaDispatchService } from './vigia-dispatch.service';
+import { VigiaSettingsService } from './vigia-settings.service';
 import { extractCnpjFromHtml, extractDocLinks } from './vigia-link-extractor';
 import {
   VIGIA_QUEUE,
@@ -26,6 +27,7 @@ export class VigiaCronService extends WorkerHost implements OnModuleInit, OnModu
     private readonly prisma: PrismaService,
     private readonly imap: VigiaImapService,
     private readonly dispatch: VigiaDispatchService,
+    private readonly settings: VigiaSettingsService,
     @InjectQueue(VIGIA_QUEUE) private readonly pollQueue: Queue,
   ) {
     super();
@@ -121,6 +123,9 @@ export class VigiaCronService extends WorkerHost implements OnModuleInit, OnModu
         continue;
       }
 
+      const template = await this.settings.getTemplate(channel.organizationId);
+      const text = this.settings.applyTemplate(template, email.subject, links);
+
       // Espaça disparos para anti-ban (1 s entre contatos do mesmo e-mail)
       for (const cc of contactCnpjs) {
         const phone = cc.contact.phone;
@@ -134,7 +139,7 @@ export class VigiaCronService extends WorkerHost implements OnModuleInit, OnModu
             channelId: channel.id,
             contactId: cc.contactId,
             phone,
-            links,
+            text,
           });
           await new Promise((r) => setTimeout(r, 1200)); // anti-ban
         } catch (err: any) {

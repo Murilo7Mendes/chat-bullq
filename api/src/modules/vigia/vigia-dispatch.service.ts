@@ -31,12 +31,11 @@ export class VigiaDispatchService {
     channelId: string;
     contactId: string;
     phone: string;
-    links: string[];
+    text: string;
   }): Promise<void> {
-    const { organizationId, channelId, contactId, phone, links } = params;
+    const { organizationId, channelId, contactId, phone, text } = params;
 
     const contactExternalId = `${phone.replace(/\D/g, '')}@s.whatsapp.net`;
-    const text = links.join('\n');
 
     // Garante que existe um ContactChannel para este par contato+canal
     await this.prisma.contactChannel.upsert({
@@ -98,7 +97,7 @@ export class VigiaDispatchService {
     );
 
     this.logger.log(
-      `vigia dispatch: contact=${contactId} conv=${conversationId} links=${links.length}`,
+      `vigia dispatch: contact=${contactId} conv=${conversationId}`,
     );
   }
 
