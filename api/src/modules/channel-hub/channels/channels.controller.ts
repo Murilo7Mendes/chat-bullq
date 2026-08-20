@@ -120,4 +120,10 @@ export class ChannelsController {
   getTemplates(@Param('id') id: string, @CurrentOrg('id') orgId: string) {
     return this.service.getTemplates(id, orgId);
   }
+
+  @Get(':id/evolution/connect')
+  @ApiOperation({ summary: 'Get Evolution API QR code / connection status for a WHATSAPP_EVOLUTION channel' })
+  evolutionConnect(@Param('id') id: string, @CurrentOrg('id') orgId: string) {
+    return this.service.evolutionConnect(id, orgId);
+  }
 }

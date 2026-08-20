@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, X } from 'lucide-react';
+import { CheckCircle2, Loader2, RefreshCw, X } from 'lucide-react';
 import { channelsService, type Channel } from '../services/channels.service';
 
 interface EditChannelDialogProps {
@@ -30,6 +30,50 @@ export function EditChannelDialog({
   const [config, setConfig] = useState<Record<string, string>>({});
   const [webhookSecret, setWebhookSecret] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Evolution QR state
+  const [qrStatus, setQrStatus] = useState<'idle' | 'loading' | 'qr' | 'open' | 'error'>('idle');
+  const [qrBase64, setQrBase64] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearTimeout(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const fetchQr = useCallback(async (channelId: string) => {
+    setQrStatus('loading');
+    try {
+      const res = await channelsService.evolutionConnect(channelId);
+      if (res.status === 'open') {
+        setQrStatus('open');
+        setQrBase64(null);
+        stopPolling();
+        return;
+      }
+      if (res.qrBase64) {
+        setQrBase64(res.qrBase64);
+        setQrStatus('qr');
+        // Poll again in 20s — QR expires after ~60s
+        pollRef.current = setTimeout(() => fetchQr(channelId), 20_000);
+      } else {
+        setQrStatus('error');
+      }
+    } catch {
+      setQrStatus('error');
+    }
+  }, [stopPolling]);
+
+  // Auto-start QR polling when dialog opens for an Evolution channel
+  useEffect(() => {
+    if (channel?.type === 'WHATSAPP_EVOLUTION') {
+      fetchQr(channel.id);
+    }
+    return () => stopPolling();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channel?.id]);
 
   useEffect(() => {
     if (!channel) return;
@@ -102,6 +146,59 @@ export function EditChannelDialog({
             <X className="h-5 w-5" />
           </button>
         </div>
+
+        {channel.type === 'WHATSAPP_EVOLUTION' && (
+          <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Conexão WhatsApp
+              </p>
+              {qrStatus !== 'open' && (
+                <button
+                  type="button"
+                  onClick={() => fetchQr(channel.id)}
+                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Atualizar
+                </button>
+              )}
+            </div>
+
+            {qrStatus === 'open' && (
+              <div className="mt-3 flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="h-5 w-5" />
+                <span className="text-sm font-medium">Conectado</span>
+              </div>
+            )}
+
+            {qrStatus === 'loading' && (
+              <div className="mt-3 flex justify-center py-6">
+                <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+              </div>
+            )}
+
+            {qrStatus === 'qr' && qrBase64 && (
+              <div className="mt-3 flex flex-col items-center gap-2">
+                <img
+                  src={qrBase64}
+                  alt="QR Code WhatsApp"
+                  className="h-52 w-52 rounded-lg border border-zinc-200 dark:border-zinc-700"
+                  style={{ imageRendering: 'pixelated' }}
+                />
+                <p className="text-center text-xs text-zinc-500">
+                  Abra o WhatsApp → Dispositivos conectados → Conectar dispositivo
+                </p>
+              </div>
+            )}
+
+            {qrStatus === 'error' && (
+              <p className="mt-3 text-xs text-red-500">
+                Não foi possível obter o QR code. Verifique a conexão com a Evolution API.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="mt-6 space-y-4">
           <div className="space-y-1.5">

@@ -11,6 +11,6 @@ import { EvolutionOutboundAdapter } from './evolution.outbound-adapter';
     EvolutionInboundAdapter,
     EvolutionOutboundAdapter,
   ],
-  exports: [EvolutionInboundAdapter, EvolutionOutboundAdapter],
+  exports: [EvolutionInboundAdapter, EvolutionOutboundAdapter, EvolutionHttpClient],
 })
 export class EvolutionModule {}

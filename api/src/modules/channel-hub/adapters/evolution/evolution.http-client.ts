@@ -138,4 +138,36 @@ export class EvolutionHttpClient {
     const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 60_000 });
     return Buffer.from(res.data as ArrayBuffer);
   }
+
+  async getConnectionState(channel: Channel): Promise<{ state: string; instance?: any }> {
+    const { instanceName } = this.getChannelConfig(channel);
+    try {
+      const res = await this.sendRequest<any>(
+        channel,
+        'GET',
+        `/instance/connectionState/${instanceName}`,
+      );
+      return { state: res?.instance?.state ?? res?.state ?? 'close', instance: res };
+    } catch {
+      return { state: 'close' };
+    }
+  }
+
+  async connectAndGetQr(channel: Channel): Promise<{ qrBase64?: string; pairingCode?: string; status: string }> {
+    const { instanceName } = this.getChannelConfig(channel);
+    const state = await this.getConnectionState(channel);
+    if (state.state === 'open') {
+      return { status: 'open' };
+    }
+    try {
+      const res = await this.sendRequest<any>(channel, 'GET', `/instance/connect/${instanceName}`);
+      return {
+        status: 'qr',
+        qrBase64: res?.base64 ?? undefined,
+        pairingCode: res?.pairingCode ?? undefined,
+      };
+    } catch {
+      return { status: 'error' };
+    }
+  }
 }

@@ -15,6 +15,7 @@ import { ZappfyHttpClient } from '../adapters/zappfy/zappfy.http-client';
 import { WhatsAppOfficialHttpClient } from '../adapters/whatsapp-official/whatsapp-official.http-client';
 import { InstagramHttpClient } from '../adapters/instagram/instagram.http-client';
 import { GmailHttpClient } from '../adapters/gmail/gmail.http-client';
+import { EvolutionHttpClient } from '../adapters/evolution/evolution.http-client';
 import { ChannelSyncOrchestrator } from '../sync/channel-sync.orchestrator';
 import {
   ChannelAccessService,
@@ -32,6 +33,7 @@ export class ChannelsService {
     private readonly waOfficialHttpClient: WhatsAppOfficialHttpClient,
     private readonly instagramHttpClient: InstagramHttpClient,
     private readonly gmailHttpClient: GmailHttpClient,
+    private readonly evolutionHttpClient: EvolutionHttpClient,
     private readonly syncOrchestrator: ChannelSyncOrchestrator,
     private readonly prisma: PrismaService,
     private readonly channelAccess: ChannelAccessService,
@@ -390,5 +392,15 @@ export class ChannelsService {
         error: error.response?.data?.error?.message || error.message,
       };
     }
+  }
+
+  async evolutionConnect(id: string, orgId: string) {
+    const channel = await this.repository.findById(id);
+    if (!channel || channel.organizationId !== orgId) throw new NotFoundException('Channel not found');
+    if (channel.type !== ChannelType.WHATSAPP_EVOLUTION) {
+      throw new BadRequestException('Channel is not a WHATSAPP_EVOLUTION channel');
+    }
+    const result = await this.evolutionHttpClient.connectAndGetQr(channel);
+    return { data: result };
   }
 }

@@ -125,4 +125,9 @@ export const channelsService = {
     const { data } = await api.get<{ data: WhatsAppTemplate[] }>(`/channels/${id}/templates`);
     return data.data;
   },
+
+  async evolutionConnect(id: string): Promise<{ status: string; qrBase64?: string; pairingCode?: string }> {
+    const { data } = await api.get<{ data: { status: string; qrBase64?: string; pairingCode?: string } }>(`/channels/${id}/evolution/connect`);
+    return data.data;
+  },
 };
