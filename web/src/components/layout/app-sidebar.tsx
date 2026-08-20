@@ -10,6 +10,7 @@ import {
   Zap,
   FolderKanban,
 } from 'lucide-react';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { InboxTree } from '@/features/inbox-views/components/inbox-tree';
 import { JarvisTree } from '@/features/ai-agents/components/jarvis-tree';
 import { PipelinesTree } from '@/features/pipelines/components/pipelines-tree';
@@ -37,7 +38,7 @@ import {
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/projects', label: 'Projetos', icon: FolderKanban },
+  { href: '/projects', label: 'Grupos', icon: FolderKanban },
   { href: '/automations', label: 'Automações', icon: Zap },
 ];
 
@@ -99,6 +100,7 @@ export function AppSidebar() {
       </SidebarBody>
 
       <SidebarFooter>
+        <ThemeToggle sidebar />
         <Dropdown>
           <DropdownButton className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-zinc-950/5 dark:hover:bg-white/5">
             <Avatar

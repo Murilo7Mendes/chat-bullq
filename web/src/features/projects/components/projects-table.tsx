@@ -53,11 +53,11 @@ export function ProjectsTable() {
       <div className="flex items-center gap-2">
         <FolderKanban className="h-6 w-6 text-primary" />
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-          Projetos
+          Grupos
         </h1>
       </div>
       <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-        Cada grupo de WhatsApp é um projeto. Clique para abrir no atendimento.
+        Cada grupo de WhatsApp é um grupo. Clique para abrir no atendimento.
       </p>
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
@@ -165,7 +165,7 @@ export function ProjectsTable() {
                   colSpan={4}
                   className="px-4 py-12 text-center text-sm text-zinc-400"
                 >
-                  Nenhum projeto encontrado.
+                  Nenhum grupo encontrado.
                 </td>
               </tr>
             )}

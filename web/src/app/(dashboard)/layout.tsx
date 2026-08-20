@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { authService } from '@/features/auth/services/auth.service';
 import { usePermissionsSync } from '@/features/settings/hooks/use-permissions-sync';
 import { ToolFailureBanner } from '@/features/ai-agents/components/tool-failure-banner';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 
 export default function DashboardLayout({
   children,
@@ -65,7 +66,7 @@ export default function DashboardLayout({
       navbar={
         <Navbar>
           <NavbarSpacer />
-          <NavbarSection><></></NavbarSection>
+          <NavbarSection><ThemeToggle /></NavbarSection>
         </Navbar>
       }
     >

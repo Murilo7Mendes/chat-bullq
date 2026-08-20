@@ -55,8 +55,12 @@ export class VigiaImapService implements OnModuleDestroy {
     }
   }
 
-  /** Busca e-mails não lidos na INBOX. Marca como lidos após buscar. */
-  async fetchUnseen(): Promise<VigiaEmail[]> {
+  /**
+   * Busca e-mails não lidos na INBOX e marca todos como lidos.
+   * Se `since` for informado, apenas e-mails com data >= since são retornados
+   * (os mais antigos são marcados como lidos para limpar a caixa, mas não processados).
+   */
+  async fetchUnseen(since?: Date): Promise<VigiaEmail[]> {
     let client: ImapFlow;
     try {
       client = await this.getClient();
@@ -84,6 +88,10 @@ export class VigiaImapService implements OnModuleDestroy {
       if (!msg.source) continue;
       try {
         const parsed = await simpleParser(msg.source as Buffer);
+        if (since && parsed.date && parsed.date < since) {
+          this.logger.debug(`vigia IMAP: uid=${msg.uid} ignorado (data ${parsed.date.toISOString()} anterior ao janela)`);
+          continue;
+        }
         emails.push({
           uid: msg.uid,
           messageId: parsed.messageId ?? `uid-${msg.uid}`,
@@ -95,7 +103,7 @@ export class VigiaImapService implements OnModuleDestroy {
       }
     }
 
-    // Marca como lido para não reprocessar no próximo tick
+    // Marca TODOS como lidos (incluindo os descartados por data) para não reprocessar
     if (uidList.length > 0) {
       await client.messageFlagsAdd(uidRange, ['\\Seen'], { uid: true });
     }

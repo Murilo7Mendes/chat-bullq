@@ -3,7 +3,6 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConversationStatus, MessageDirection, MessageStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
-import { ConversationFsmService } from '../messaging/conversations/conversation-fsm.service';
 import { MessageContentType } from '../channel-hub/ports/types/normalized-message.types';
 
 const OPEN_STATUSES = [
@@ -19,7 +18,6 @@ export class VigiaDispatchService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly fsm: ConversationFsmService,
     @InjectQueue('outbound-messages') private readonly outboundQueue: Queue,
   ) {}
 
@@ -98,16 +96,6 @@ export class VigiaDispatchService {
       },
       { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, removeOnComplete: true },
     );
-
-    // Fecha conversa imediatamente — a IA entra quando o cliente responder
-    try {
-      await this.fsm.transition(conversationId, ConversationStatus.CLOSED, undefined, {
-        trigger: 'vigia_notification',
-      });
-    } catch (err: any) {
-      // Se a conversa já foi fechada por outro caminho, não é erro crítico
-      this.logger.warn(`vigia: transition CLOSED falhou para ${conversationId}: ${err?.message}`);
-    }
 
     this.logger.log(
       `vigia dispatch: contact=${contactId} conv=${conversationId} links=${links.length}`,

@@ -73,7 +73,9 @@ export class VigiaCronService extends WorkerHost implements OnModuleInit, OnModu
       return { processed: 0, skipped: 0 };
     }
 
-    const emails = await this.imap.fetchUnseen();
+    const lookbackMs = (this.config.get<number>('VIGIA_LOOKBACK_MINUTES') || 10) * 60 * 1000;
+    const since = new Date(Date.now() - lookbackMs);
+    const emails = await this.imap.fetchUnseen(since);
     let processed = 0;
     let skipped = 0;
 
