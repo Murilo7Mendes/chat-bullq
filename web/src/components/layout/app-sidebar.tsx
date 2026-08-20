@@ -9,6 +9,7 @@ import {
   ChevronUp,
   Zap,
   FolderKanban,
+  Users,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { InboxTree } from '@/features/inbox-views/components/inbox-tree';
@@ -38,6 +39,7 @@ import {
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/contacts', label: 'Contatos', icon: Users },
   { href: '/projects', label: 'Grupos', icon: FolderKanban },
   { href: '/automations', label: 'Automações', icon: Zap },
 ];
