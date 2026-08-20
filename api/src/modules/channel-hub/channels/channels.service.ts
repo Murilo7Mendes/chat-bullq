@@ -85,6 +85,13 @@ export class ChannelsService {
       );
     }
 
+    // Evolution: create instance on the provider and configure webhook automatically.
+    if (dto.type === ChannelType.WHATSAPP_EVOLUTION) {
+      this.setupEvolutionInstance(channel.id).catch((err) =>
+        this.logger.warn(`Evolution instance setup failed: ${err.message}`),
+      );
+    }
+
     // WA Official needs the app explicitly subscribed to the WABA before Meta
     // starts delivering webhooks. Fire-and-forget — fails silently when the
     // token lacks `whatsapp_business_management` scope or businessAccountId
@@ -178,6 +185,41 @@ export class ChannelsService {
     this.logger.log(
       `WA Official app subscribed to WABA ${config.businessAccountId} (channel ${channelId})`,
     );
+  }
+
+  private async setupEvolutionInstance(channelId: string): Promise<void> {
+    const channel = await this.repository.findById(channelId);
+    if (!channel) return;
+    const cfg = (channel.config as Record<string, any>) || {};
+    const instanceName = cfg.instanceName as string;
+    if (!instanceName) {
+      this.logger.warn(`Evolution channel ${channelId} has no instanceName — skipping auto-setup`);
+      return;
+    }
+
+    // Create instance — ignore 403 if it already exists.
+    try {
+      await this.evolutionHttpClient.sendRequest(channel, 'POST', '/instance/create', {
+        instanceName,
+        integration: 'WHATSAPP-BAILEYS',
+      });
+      this.logger.log(`Evolution instance created: ${instanceName}`);
+    } catch (err: any) {
+      const msg = err?.response?.data?.response?.message?.[0] ?? err.message ?? '';
+      if (!msg.includes('already in use')) throw err;
+      this.logger.log(`Evolution instance already exists: ${instanceName}`);
+    }
+
+    // Configure webhook pointing to our internal API URL.
+    const webhookUrl = `http://api:3001/api/v1/webhooks/WHATSAPP_EVOLUTION`;
+    await this.evolutionHttpClient.sendRequest(channel, 'POST', `/webhook/set/${instanceName}`, {
+      webhook: {
+        url: webhookUrl,
+        enabled: true,
+        events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE'],
+      },
+    });
+    this.logger.log(`Evolution webhook configured for instance ${instanceName}: ${webhookUrl}`);
   }
 
   async findAll(organizationId: string, access: ChannelAccess) {
@@ -400,7 +442,6 @@ export class ChannelsService {
     if (channel.type !== ChannelType.WHATSAPP_EVOLUTION) {
       throw new BadRequestException('Channel is not a WHATSAPP_EVOLUTION channel');
     }
-    const result = await this.evolutionHttpClient.connectAndGetQr(channel);
-    return { data: result };
+    return this.evolutionHttpClient.connectAndGetQr(channel);
   }
 }

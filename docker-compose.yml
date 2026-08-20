@@ -104,8 +104,7 @@ services:
       SERVER_URL: http://localhost:8080
       DATABASE_PROVIDER: postgresql
       DATABASE_CONNECTION_URI: "postgresql://bravy:bravy123@postgres:5432/chat_bullq?schema=evolution_api"
-      REDIS_ENABLED: "true"
-      REDIS_URI: "redis://redis:6379"
+      REDIS_ENABLED: "false"
       AUTHENTICATION_TYPE: apikey
       AUTHENTICATION_API_KEY: "bullq-evolution-secret"
       WEBHOOK_GLOBAL_ENABLED: "false"

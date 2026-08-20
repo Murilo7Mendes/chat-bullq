@@ -161,8 +161,18 @@ export class EvolutionHttpClient {
     }
     try {
       const res = await this.sendRequest<any>(channel, 'GET', `/instance/connect/${instanceName}`);
+      // When state is 'connecting', Evolution may return {count:0} without a QR.
+      // Retry once after a short wait to catch the QR once Baileys initializes.
+      if (!res?.base64 && res?.count === 0) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const retry = await this.sendRequest<any>(channel, 'GET', `/instance/connect/${instanceName}`);
+        if (retry?.base64) {
+          return { status: 'qr', qrBase64: retry.base64, pairingCode: retry.pairingCode ?? undefined };
+        }
+        return { status: 'connecting' };
+      }
       return {
-        status: 'qr',
+        status: res?.base64 ? 'qr' : 'connecting',
         qrBase64: res?.base64 ?? undefined,
         pairingCode: res?.pairingCode ?? undefined,
       };

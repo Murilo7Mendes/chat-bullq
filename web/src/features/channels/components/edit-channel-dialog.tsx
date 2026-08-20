@@ -58,6 +58,10 @@ export function EditChannelDialog({
         setQrStatus('qr');
         // Poll again in 20s — QR expires after ~60s
         pollRef.current = setTimeout(() => fetchQr(channelId), 20_000);
+      } else if (res.status === 'connecting') {
+        // Baileys still initializing — retry in 4s
+        setQrStatus('loading');
+        pollRef.current = setTimeout(() => fetchQr(channelId), 4_000);
       } else {
         setQrStatus('error');
       }
