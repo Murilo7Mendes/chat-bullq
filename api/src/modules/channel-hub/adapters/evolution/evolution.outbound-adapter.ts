@@ -30,10 +30,7 @@ export class EvolutionOutboundAdapter implements OutboundChannelPort {
         break;
 
       case MessageContentType.IMAGE: {
-        const imageMedia = await this.http.resolveMediaAsBase64(
-          message.content.mediaUrl!,
-          message.content.mimeType,
-        );
+        const imageMedia = await this.http.resolveMediaAsBase64(message.content.mediaUrl!);
         response = await this.http.sendMedia(
           channel,
           number,
@@ -47,10 +44,7 @@ export class EvolutionOutboundAdapter implements OutboundChannelPort {
       }
 
       case MessageContentType.VIDEO: {
-        const videoMedia = await this.http.resolveMediaAsBase64(
-          message.content.mediaUrl!,
-          message.content.mimeType,
-        );
+        const videoMedia = await this.http.resolveMediaAsBase64(message.content.mediaUrl!);
         response = await this.http.sendMedia(
           channel,
           number,
@@ -62,10 +56,7 @@ export class EvolutionOutboundAdapter implements OutboundChannelPort {
       }
 
       case MessageContentType.DOCUMENT: {
-        const docMedia = await this.http.resolveMediaAsBase64(
-          message.content.mediaUrl!,
-          message.content.mimeType,
-        );
+        const docMedia = await this.http.resolveMediaAsBase64(message.content.mediaUrl!);
         response = await this.http.sendMedia(
           channel,
           number,
@@ -79,29 +70,14 @@ export class EvolutionOutboundAdapter implements OutboundChannelPort {
       }
 
       case MessageContentType.AUDIO: {
-        const audioMedia = await this.http.resolveMediaAsBase64(
-          message.content.mediaUrl!,
-          message.content.mimeType,
-        );
-        response = await this.http.sendWhatsAppAudio(
-          channel,
-          number,
-          audioMedia,
-        );
+        const audioMedia = await this.http.resolveMediaAsBase64(message.content.mediaUrl!);
+        response = await this.http.sendWhatsAppAudio(channel, number, audioMedia);
         break;
       }
 
       case MessageContentType.STICKER: {
-        const stickerMedia = await this.http.resolveMediaAsBase64(
-          message.content.mediaUrl!,
-          message.content.mimeType,
-        );
-        response = await this.http.sendMedia(
-          channel,
-          number,
-          'sticker',
-          stickerMedia,
-        );
+        const stickerMedia = await this.http.resolveMediaAsBase64(message.content.mediaUrl!);
+        response = await this.http.sendMedia(channel, number, 'sticker', stickerMedia);
         break;
       }
 

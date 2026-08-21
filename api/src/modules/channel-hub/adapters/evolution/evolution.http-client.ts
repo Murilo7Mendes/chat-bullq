@@ -151,7 +151,7 @@ export class EvolutionHttpClient {
    * external URLs, download via HTTP and return base64.
    * Format: "data:{mimeType};base64,{data}" — Evolution accepts this.
    */
-  async resolveMediaAsBase64(mediaUrl: string, mimeType = 'application/octet-stream'): Promise<string> {
+  async resolveMediaAsBase64(mediaUrl: string): Promise<string> {
     let buffer: Buffer;
     if (this.uploadsUrlPrefix && mediaUrl.startsWith(this.uploadsUrlPrefix)) {
       const relativePath = mediaUrl.slice(this.uploadsUrlPrefix.length);
@@ -160,7 +160,7 @@ export class EvolutionHttpClient {
     } else {
       buffer = await this.downloadFromUrl(mediaUrl);
     }
-    return `data:${mimeType};base64,${buffer.toString('base64')}`;
+    return buffer.toString('base64');
   }
 
   async downloadFromUrl(url: string): Promise<Buffer> {
