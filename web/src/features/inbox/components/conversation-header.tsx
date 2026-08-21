@@ -20,6 +20,8 @@ import { AssignmentPopover } from './assignment-popover';
 import { AgentPinPopover } from './agent-pin-popover';
 import { PipelinePopover } from './pipeline-popover';
 import { inboxService, type Conversation } from '../services/inbox.service';
+import { ContactDrawer } from '@/features/contacts/components/contact-drawer';
+import type { Contact } from '@/features/contacts/services/contacts.service';
 
 interface ConversationHeaderProps {
   conversation: Conversation;
@@ -110,6 +112,7 @@ export function ConversationHeader({
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -147,7 +150,12 @@ export function ConversationHeader({
 
   return (
     <div className="flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="flex items-center gap-3">
+      <button
+        type="button"
+        onClick={() => setContactDrawerOpen(true)}
+        className="flex items-center gap-3 rounded-lg px-1 py-0.5 text-left transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"
+        title="Ver informações do contato"
+      >
         <HeaderAvatar
           name={conversation.contact.name}
           avatarUrl={conversation.contact.avatarUrl}
@@ -164,7 +172,12 @@ export function ConversationHeader({
             name={conversation.channel.name}
           />
         </div>
-      </div>
+      </button>
+      <ContactDrawer
+        open={contactDrawerOpen}
+        onClose={() => setContactDrawerOpen(false)}
+        contact={conversation.contact as Contact}
+      />
 
       <div className="flex items-center gap-1.5">
         <AgentPinPopover conversation={conversation} onChanged={onUpdate} />

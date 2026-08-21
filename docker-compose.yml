@@ -61,8 +61,10 @@ services:
       REDIS_PORT: "6379"
       MINIO_ENDPOINT: minio
       MINIO_PORT: "9000"
-      # URL interna Docker — Evolution usa esse endereço para baixar mídias enviadas pelo operador
+      # URL interna Docker — usada pelo Evolution adapter para ler arquivos do disco
       APP_URL: http://api:3001
+      # URL pública — usada para gerar mediaUrl acessível pelo browser
+      PUBLIC_APP_URL: http://localhost:3001
     ports:
       - "3001:3001"
     depends_on:

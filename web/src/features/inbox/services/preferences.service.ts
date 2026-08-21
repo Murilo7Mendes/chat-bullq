@@ -20,6 +20,8 @@ export interface InboxPreferences {
   selectedProjectStatus?: string;
   /** "Meus projetos" — só grupos cujo responsável de projeto sou eu. */
   mineProjects?: boolean;
+  /** Quando true, conversas CLOSED aparecem na lista. Default false — esconde encerradas. */
+  showClosed?: boolean;
 }
 
 export interface UserPreferences {

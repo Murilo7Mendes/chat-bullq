@@ -27,6 +27,7 @@ import {
   inboxViewsService,
   type InboxView,
 } from '../services/inbox-views.service';
+import { inboxService } from '@/features/inbox/services/inbox.service';
 import { InboxViewDialog } from './inbox-view-dialog';
 
 const VIEW_ICON: Record<string, any> = {
@@ -81,6 +82,19 @@ export function InboxTree() {
     staleTime: 60000,
   });
 
+  const { data: unreadData } = useQuery({
+    queryKey: ['conversations', 'unread-badge'],
+    queryFn: () =>
+      inboxService.getConversations({
+        unread: 'true',
+        limit: '1',
+        status: 'PENDING,OPEN,BOT,WAITING',
+      }),
+    staleTime: 0,
+    refetchInterval: 15000,
+  });
+  const unreadCount = unreadData?.pagination?.total ?? 0;
+
   const toggleExpanded = () => {
     const next = !expanded;
     setExpanded(next);
@@ -129,6 +143,11 @@ export function InboxTree() {
         >
           <Inbox className="size-5" />
           <span className="flex-1">Inbox</span>
+          {!expanded && unreadCount > 0 && (
+            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
         </button>
       </div>
 
@@ -173,6 +192,11 @@ export function InboxTree() {
                 >
                   <Icon className={`size-3.5 ${colorCls}`} />
                   <span className="flex-1 truncate">{v.name}</span>
+                  {v.filters?.unreadOnly && unreadCount > 0 && (
+                    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
                 </button>
                 {!isBuiltin && (
                   <div className="flex shrink-0 opacity-0 transition-opacity group-hover:opacity-100">

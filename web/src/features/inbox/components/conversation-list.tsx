@@ -94,7 +94,7 @@ const statusColors: Record<string, string> = {
   CLOSED: 'bg-zinc-300 dark:bg-zinc-600',
 };
 
-type ListFilter = 'unread' | 'archived' | 'groups';
+type ListFilter = 'unread' | 'archived' | 'groups' | 'closed';
 
 const filterOptions: { label: string; value: ListFilter; icon: React.ElementType; description: string }[] = [
   {
@@ -114,6 +114,12 @@ const filterOptions: { label: string; value: ListFilter; icon: React.ElementType
     value: 'groups',
     icon: Users,
     description: 'Inclui conversas de grupos. Desmarcado = esconde.',
+  },
+  {
+    label: 'Encerradas',
+    value: 'closed',
+    icon: XCircle,
+    description: 'Mostra conversas encerradas. Desmarcado = esconde.',
   },
 ];
 
@@ -144,18 +150,21 @@ export function ConversationList({ activeId, onSelect, viewId }: ConversationLis
   // Default false = grupos NÃO aparecem no inbox geral (regra do JP).
   // Toggle pra true exibe junto com individuais.
   const [showGroups, setShowGroups] = useState(false);
+  // Default false = conversas CLOSED ficam ocultas por padrão.
+  const [showClosed, setShowClosed] = useState(false);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [selectedProjectStatus, setSelectedProjectStatus] = useState('');
   const [mineProjects, setMineProjects] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [tagSearch, setTagSearch] = useState('');
-  // showGroups conta como filtro ativo SÓ quando ON (default OFF é o
-  // comportamento padrão, não merece badge). Tags contam 1 por tag.
+  // showGroups e showClosed contam como filtro ativo SÓ quando ON (default OFF
+  // é o comportamento padrão, não merece badge). Tags contam 1 por tag.
   const activeFilterCount =
     (unreadOnly ? 1 : 0) +
     (archivedOnly ? 1 : 0) +
     (showGroups ? 1 : 0) +
+    (showClosed ? 1 : 0) +
     (selectedProjectStatus ? 1 : 0) +
     (mineProjects ? 1 : 0) +
     selectedTagIds.length;
@@ -189,6 +198,9 @@ export function ConversationList({ activeId, onSelect, viewId }: ConversationLis
     }
     if (typeof savedPrefs.showGroups === 'boolean') {
       setShowGroups(savedPrefs.showGroups);
+    }
+    if (typeof savedPrefs.showClosed === 'boolean') {
+      setShowClosed(savedPrefs.showClosed);
     }
     if (savedPrefs.selectedChannelId !== undefined) {
       setSelectedChannelId(savedPrefs.selectedChannelId ?? null);
@@ -227,6 +239,12 @@ export function ConversationList({ activeId, onSelect, viewId }: ConversationLis
           updatePrefs({ showGroups: next });
           return next;
         });
+      } else if (value === 'closed') {
+        setShowClosed((v) => {
+          const next = !v;
+          updatePrefs({ showClosed: next });
+          return next;
+        });
       }
     },
     [updatePrefs],
@@ -236,6 +254,7 @@ export function ConversationList({ activeId, onSelect, viewId }: ConversationLis
     setUnreadOnly(false);
     setArchivedOnly(false);
     setShowGroups(false);
+    setShowClosed(false);
     setSelectedTagIds([]);
     setSelectedProjectStatus('');
     setMineProjects(false);
@@ -243,6 +262,7 @@ export function ConversationList({ activeId, onSelect, viewId }: ConversationLis
       unreadOnly: false,
       archivedOnly: false,
       showGroups: false,
+      showClosed: false,
       tagIds: [],
       selectedProjectStatus: '',
       mineProjects: false,
@@ -309,7 +329,7 @@ export function ConversationList({ activeId, onSelect, viewId }: ConversationLis
     () => [...selectedTagIds].sort().join(','),
     [selectedTagIds],
   );
-  const filterKey = `${unreadOnly ? 'u' : ''}|${archivedOnly ? 'a' : ''}|${showGroups ? 'g' : ''}|ps:${selectedProjectStatus}|mp:${mineProjects ? '1' : ''}|t:${tagsKey}`;
+  const filterKey = `${unreadOnly ? 'u' : ''}|${archivedOnly ? 'a' : ''}|${showGroups ? 'g' : ''}|${showClosed ? 'c' : ''}|ps:${selectedProjectStatus}|mp:${mineProjects ? '1' : ''}|t:${tagsKey}`;
 
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
@@ -370,7 +390,7 @@ export function ConversationList({ activeId, onSelect, viewId }: ConversationLis
   // Reset scroll when filters/search change
   useEffect(() => {
     scrollContainerRef.current?.scrollTo({ top: 0 });
-  }, [filterKey, debouncedSearch, selectedChannelId, selectedSegmentId, scope, showGroups, tagsKey]);
+  }, [filterKey, debouncedSearch, selectedChannelId, selectedSegmentId, scope, showGroups, showClosed, tagsKey]);
 
   const {
     data,
@@ -414,6 +434,7 @@ export function ConversationList({ activeId, onSelect, viewId }: ConversationLis
         }
         if (selectedChannelId) params.channelId = selectedChannelId;
       }
+      if (!showClosed) params.status = 'PENDING,OPEN,BOT,WAITING';
       if (debouncedSearch) params.search = debouncedSearch;
       if (selectedTagIds.length > 0) params.tagIds = selectedTagIds.join(',');
       if (scope === 'MINE' && currentUserId) params.assignedToId = currentUserId;
@@ -545,6 +566,20 @@ export function ConversationList({ activeId, onSelect, viewId }: ConversationLis
                     }
                   : {}),
               })),
+            };
+          },
+        );
+        // Decrement the sidebar unread badge immediately.
+        queryClient.setQueryData<any>(
+          ['conversations', 'unread-badge'],
+          (old: any) => {
+            if (!old?.pagination) return old;
+            return {
+              ...old,
+              pagination: {
+                ...old.pagination,
+                total: Math.max(0, (old.pagination.total ?? 1) - 1),
+              },
             };
           },
         );
@@ -1052,7 +1087,9 @@ export function ConversationList({ activeId, onSelect, viewId }: ConversationLis
                     ? unreadOnly
                     : f.value === 'archived'
                       ? archivedOnly
-                      : showGroups;
+                      : f.value === 'groups'
+                        ? showGroups
+                        : showClosed;
                 const Icon = f.icon;
                 return (
                   <button
@@ -1240,7 +1277,13 @@ export function ConversationList({ activeId, onSelect, viewId }: ConversationLis
         <div className="flex flex-wrap gap-1.5 px-3 pb-2">
           {filterOptions.map((option) => {
             const isActive =
-              option.value === 'unread' ? unreadOnly : archivedOnly;
+              option.value === 'unread'
+                ? unreadOnly
+                : option.value === 'archived'
+                  ? archivedOnly
+                  : option.value === 'groups'
+                    ? showGroups
+                    : showClosed;
             if (!isActive) return null;
             return (
               <span
@@ -1487,7 +1530,7 @@ export function ConversationList({ activeId, onSelect, viewId }: ConversationLis
                                         : 'text-zinc-800 dark:text-zinc-200')
                                 }`}
                               >
-                                {conv.contact.name || conv.contact.phone || 'Desconhecido'}
+                                {conv.isGroup ? (conv.subject || conv.contact.name || 'Grupo') : (conv.contact.name || conv.contact.phone || 'Desconhecido')}
                               </span>
                               <div className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusColors[conv.status] || 'bg-zinc-300'}`} />
                             </div>

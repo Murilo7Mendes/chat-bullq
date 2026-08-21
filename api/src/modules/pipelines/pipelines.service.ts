@@ -157,6 +157,12 @@ export class PipelinesService {
 
   async removePipeline(id: string, organizationId: string) {
     await this.assertPipeline(id, organizationId);
+    const cardCount = await this.prisma.card.count({ where: { pipelineId: id } });
+    if (cardCount > 0) {
+      throw new BadRequestException(
+        `Pipeline tem ${cardCount} card(s) vinculado(s). Mova ou remova-os antes de excluir.`,
+      );
+    }
     await this.prisma.pipeline.delete({ where: { id } });
   }
 

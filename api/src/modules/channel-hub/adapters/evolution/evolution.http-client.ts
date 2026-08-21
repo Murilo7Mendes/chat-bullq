@@ -9,11 +9,18 @@ import * as path from 'path';
 export class EvolutionHttpClient {
   private readonly logger = new Logger(EvolutionHttpClient.name);
   private readonly uploadsUrlPrefix: string;
+  private readonly uploadsPublicUrlPrefix: string;
   private readonly uploadsDir: string;
 
   constructor(private readonly config: ConfigService) {
     const appUrl = config.get<string>('APP_URL', '').replace(/\/$/, '');
+    const publicAppUrl = (
+      config.get<string>('PUBLIC_APP_URL', '') || appUrl
+    ).replace(/\/$/, '');
+    // Accept both the internal Docker URL and the public URL so disk reads
+    // work regardless of which URL was stored when the file was uploaded.
     this.uploadsUrlPrefix = `${appUrl}/api/v1/uploads`;
+    this.uploadsPublicUrlPrefix = `${publicAppUrl}/api/v1/uploads`;
     this.uploadsDir = path.resolve(
       config.get<string>('UPLOADS_DIR') || path.join(process.cwd(), 'uploads'),
     );
@@ -153,8 +160,15 @@ export class EvolutionHttpClient {
    */
   async resolveMediaAsBase64(mediaUrl: string): Promise<string> {
     let buffer: Buffer;
-    if (this.uploadsUrlPrefix && mediaUrl.startsWith(this.uploadsUrlPrefix)) {
-      const relativePath = mediaUrl.slice(this.uploadsUrlPrefix.length);
+    const internalMatch =
+      this.uploadsUrlPrefix && mediaUrl.startsWith(this.uploadsUrlPrefix);
+    const publicMatch =
+      this.uploadsPublicUrlPrefix &&
+      this.uploadsPublicUrlPrefix !== this.uploadsUrlPrefix &&
+      mediaUrl.startsWith(this.uploadsPublicUrlPrefix);
+    if (internalMatch || publicMatch) {
+      const prefix = internalMatch ? this.uploadsUrlPrefix : this.uploadsPublicUrlPrefix;
+      const relativePath = mediaUrl.slice(prefix.length);
       const fullPath = path.join(this.uploadsDir, relativePath);
       buffer = await fs.promises.readFile(fullPath);
     } else {

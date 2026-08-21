@@ -85,8 +85,11 @@ export class UploadsService {
       this.config.get<string>('UPLOADS_DIR') ||
         path.join(process.cwd(), 'uploads'),
     );
-    const appUrl = this.config.get<string>('APP_URL') || '';
-    this.publicBaseUrl = `${appUrl.replace(/\/$/, '')}/api/v1/uploads`;
+    const publicAppUrl =
+      this.config.get<string>('PUBLIC_APP_URL') ||
+      this.config.get<string>('APP_URL') ||
+      '';
+    this.publicBaseUrl = `${publicAppUrl.replace(/\/$/, '')}/api/v1/uploads`;
     if (!fs.existsSync(this.rootDir)) {
       fs.mkdirSync(this.rootDir, { recursive: true });
     }

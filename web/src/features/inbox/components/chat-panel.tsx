@@ -1014,12 +1014,12 @@ export function ChatPanel({
                     )}
                     <div className="relative max-w-[75%]">
                       {conversation.isGroup && !isOutbound && msg.senderName && (
-                        <p className="mb-0.5 ml-1 text-xs font-semibold text-primary">
+                        <p className="mb-0.5 ml-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
                           {msg.senderName}
                         </p>
                       )}
                       {isOutbound && (msg.sender?.name || (msg.senderId && msg.senderId === user?.id && user?.name)) && (
-                        <p className="mb-0.5 mr-1 text-right text-xs font-semibold text-primary">
+                        <p className="mb-0.5 mr-1 text-right text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                           {msg.sender?.name || user?.name}
                         </p>
                       )}
