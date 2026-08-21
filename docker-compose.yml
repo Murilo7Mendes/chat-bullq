@@ -72,6 +72,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+    volumes:
+      - uploads_data:/app/uploads
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:3001/docs || exit 1"]
       interval: 30s
@@ -154,3 +156,4 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  uploads_data:

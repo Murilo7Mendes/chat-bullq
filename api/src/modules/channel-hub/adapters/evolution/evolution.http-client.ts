@@ -2,12 +2,22 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Channel } from '@prisma/client';
 import axios from 'axios';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class EvolutionHttpClient {
   private readonly logger = new Logger(EvolutionHttpClient.name);
+  private readonly uploadsUrlPrefix: string;
+  private readonly uploadsDir: string;
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(private readonly config: ConfigService) {
+    const appUrl = config.get<string>('APP_URL', '').replace(/\/$/, '');
+    this.uploadsUrlPrefix = `${appUrl}/api/v1/uploads`;
+    this.uploadsDir = path.resolve(
+      config.get<string>('UPLOADS_DIR') || path.join(process.cwd(), 'uploads'),
+    );
+  }
 
   private getChannelConfig(channel: Channel): {
     baseUrl: string;
@@ -132,6 +142,25 @@ export class EvolutionHttpClient {
       number,
       options: presence,
     });
+  }
+
+  /**
+   * Evolution v2 rejects internal Docker hostnames (e.g. http://api:3001) as
+   * invalid URLs because they lack a public TLD. For files hosted on our own
+   * uploads directory, read them directly from disk and return base64; for
+   * external URLs, download via HTTP and return base64.
+   * Format: "data:{mimeType};base64,{data}" — Evolution accepts this.
+   */
+  async resolveMediaAsBase64(mediaUrl: string, mimeType = 'application/octet-stream'): Promise<string> {
+    let buffer: Buffer;
+    if (this.uploadsUrlPrefix && mediaUrl.startsWith(this.uploadsUrlPrefix)) {
+      const relativePath = mediaUrl.slice(this.uploadsUrlPrefix.length);
+      const fullPath = path.join(this.uploadsDir, relativePath);
+      buffer = await fs.promises.readFile(fullPath);
+    } else {
+      buffer = await this.downloadFromUrl(mediaUrl);
+    }
+    return `data:${mimeType};base64,${buffer.toString('base64')}`;
   }
 
   async downloadFromUrl(url: string): Promise<Buffer> {
