@@ -1,5 +1,6 @@
 const CNPJ_REGEX = /(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})/;
-// Apenas links diretos de documento do Acessórias
+
+// Links diretos de documento do Acessórias (getguia.php)
 const DOC_LINK_RE = /^https?:\/\/app\.acessorias\.com\/getguia\.php/i;
 
 /**
@@ -15,8 +16,8 @@ export function extractCnpjFromHtml(html: string): string | null {
 }
 
 /**
- * Extrai só os links de documento do Acessórias do HTML.
- * Descarta rodapés de marketing (redes sociais, app stores, etc.).
+ * Extrai links de documento do Acessórias (getguia.php).
+ * Descarta rodapés de marketing, redes sociais, etc.
  */
 export function extractDocLinks(html: string): string[] {
   const seen = new Set<string>();

@@ -4,6 +4,7 @@ import { VigiaImapService } from './vigia-imap.service';
 import { VigiaDispatchService } from './vigia-dispatch.service';
 import { VigiaCronService } from './vigia-cron.service';
 import { VigiaSettingsService } from './vigia-settings.service';
+import { VigiaStatusService } from './vigia-status.service';
 import { VigiaSettingsController } from './vigia-settings.controller';
 import { VIGIA_QUEUE } from './vigia.constants';
 
@@ -13,6 +14,12 @@ import { VIGIA_QUEUE } from './vigia.constants';
     BullModule.registerQueue({ name: 'outbound-messages' }),
   ],
   controllers: [VigiaSettingsController],
-  providers: [VigiaImapService, VigiaDispatchService, VigiaCronService, VigiaSettingsService],
+  providers: [
+    VigiaImapService,
+    VigiaDispatchService,
+    VigiaCronService,
+    VigiaSettingsService,
+    VigiaStatusService,
+  ],
 })
 export class VigiaModule {}

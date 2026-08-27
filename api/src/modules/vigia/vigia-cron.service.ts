@@ -2,11 +2,12 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { Processor, WorkerHost, InjectQueue } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import { Job, Queue } from 'bullmq';
-import Redis from 'ioredis';
 import { PrismaService } from '../../database/prisma.service';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { VigiaImapService } from './vigia-imap.service';
 import { VigiaDispatchService } from './vigia-dispatch.service';
 import { VigiaSettingsService } from './vigia-settings.service';
+import { VigiaStatusService, VigiaStatus } from './vigia-status.service';
 import { extractCnpjFromHtml, extractDocLinks } from './vigia-link-extractor';
 import {
   VIGIA_QUEUE,
@@ -15,12 +16,14 @@ import {
   VIGIA_PROCESSED_TTL_S,
   VIGIA_REDIS_PREFIX,
 } from './vigia.constants';
+import Redis from 'ioredis';
 
 @Processor(VIGIA_QUEUE, { concurrency: 1 })
 @Injectable()
 export class VigiaCronService extends WorkerHost implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(VigiaCronService.name);
   private redis!: Redis;
+  private orgId: string | null = null;
 
   constructor(
     private readonly config: ConfigService,
@@ -28,6 +31,8 @@ export class VigiaCronService extends WorkerHost implements OnModuleInit, OnModu
     private readonly imap: VigiaImapService,
     private readonly dispatch: VigiaDispatchService,
     private readonly settings: VigiaSettingsService,
+    private readonly statusSvc: VigiaStatusService,
+    private readonly realtime: RealtimeGateway,
     @InjectQueue(VIGIA_QUEUE) private readonly pollQueue: Queue,
   ) {
     super();
@@ -75,9 +80,23 @@ export class VigiaCronService extends WorkerHost implements OnModuleInit, OnModu
       return { processed: 0, skipped: 0 };
     }
 
-    const lookbackMs = (this.config.get<number>('VIGIA_LOOKBACK_MINUTES') || 10) * 60 * 1000;
-    const since = new Date(Date.now() - lookbackMs);
-    const emails = await this.imap.fetchUnseen(since);
+    this.orgId = channel.organizationId;
+
+    // Processa apenas e-mails recebidos hoje (início do dia local) —
+    // evita disparar guias atrasadas quando o sistema fica offline por dias.
+    const since = startOfToday();
+    let emails: Awaited<ReturnType<VigiaImapService['fetchUnseen']>>;
+
+    try {
+      emails = await this.imap.fetchUnseen(since);
+    } catch (err: any) {
+      const msg = err?.message ?? String(err);
+      this.logger.error(`vigia IMAP: erro no fetch — ${msg}`);
+      const status = await this.statusSvc.recordError(this.orgId, msg);
+      this.emitStatus(this.orgId, status);
+      return { processed: 0, skipped: 0 };
+    }
+
     let processed = 0;
     let skipped = 0;
 
@@ -158,10 +177,27 @@ export class VigiaCronService extends WorkerHost implements OnModuleInit, OnModu
       this.logger.log(`vigia tick: emails=${emails.length} processed=${processed} skipped=${skipped}`);
     }
 
+    const status = await this.statusSvc.recordRun(this.orgId, processed, skipped);
+    this.emitStatus(this.orgId, status);
+
     return { processed, skipped };
+  }
+
+  private emitStatus(orgId: string, status: VigiaStatus) {
+    try {
+      this.realtime.emitToOrg(orgId, 'vigia:status', status);
+    } catch {
+      // gateway pode não estar pronto no primeiro tick
+    }
   }
 
   private async markProcessed(key: string): Promise<void> {
     await this.redis.set(key, '1', 'EX', VIGIA_PROCESSED_TTL_S);
   }
+}
+
+function startOfToday(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
 }

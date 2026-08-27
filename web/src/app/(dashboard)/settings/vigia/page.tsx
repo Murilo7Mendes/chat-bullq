@@ -2,23 +2,72 @@
 
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, RotateCcw } from 'lucide-react';
+import { Loader2, RotateCcw, RefreshCw, Wifi, WifiOff, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { vigiaService } from '@/features/vigia/services/vigia.service';
+import { vigiaService, VigiaStatus } from '@/features/vigia/services/vigia.service';
+import { getSocket } from '@/lib/socket';
+
+function formatRelative(iso: string | null): string {
+  if (!iso) return '—';
+  const diff = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return `há ${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `há ${m}min`;
+  const h = Math.floor(m / 60);
+  return `há ${h}h`;
+}
+
+function StatusBadge({ state }: { state: VigiaStatus['state'] }) {
+  if (state === 'ok')
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+        <CheckCircle2 className="h-3 w-3" /> Operando
+      </span>
+    );
+  if (state === 'error')
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
+        <AlertCircle className="h-3 w-3" /> Erro
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+      <WifiOff className="h-3 w-3" /> Desconectado
+    </span>
+  );
+}
 
 export default function VigiaSettingsPage() {
   const qc = useQueryClient();
   const [template, setTemplate] = useState('');
   const [dirty, setDirty] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data: settings, isLoading } = useQuery({
     queryKey: ['vigia-settings'],
     queryFn: () => vigiaService.getSettings(),
   });
 
+  const { data: status } = useQuery({
+    queryKey: ['vigia-status'],
+    queryFn: () => vigiaService.getStatus(),
+    refetchInterval: 30_000,
+    staleTime: 0,
+  });
+
+  // Atualiza status via WebSocket em tempo real
   useEffect(() => {
-    if (data && !dirty) setTemplate(data.messageTemplate);
-  }, [data]);
+    const socket = getSocket();
+    const handler = (s: VigiaStatus) => {
+      qc.setQueryData(['vigia-status'], s);
+    };
+    socket.on('vigia:status', handler);
+    return () => { socket.off('vigia:status', handler); };
+  }, [qc]);
+
+  useEffect(() => {
+    if (settings && !dirty) setTemplate(settings.messageTemplate);
+  }, [settings]);
 
   const save = useMutation({
     mutationFn: () => vigiaService.saveSettings(template),
@@ -30,8 +79,17 @@ export default function VigiaSettingsPage() {
     onError: () => toast.error('Erro ao salvar template'),
   });
 
+  const reconnect = useMutation({
+    mutationFn: () => vigiaService.reconnect(),
+    onSuccess: () => {
+      toast.success('Reconexão solicitada — próximo tick reconecta automaticamente');
+      qc.invalidateQueries({ queryKey: ['vigia-status'] });
+    },
+    onError: () => toast.error('Erro ao solicitar reconexão'),
+  });
+
   const reset = () => {
-    if (data) { setTemplate(data.defaultTemplate); setDirty(true); }
+    if (settings) { setTemplate(settings.defaultTemplate); setDirty(true); }
   };
 
   const VARS = [
@@ -42,10 +100,56 @@ export default function VigiaSettingsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-8 py-2">
       <div>
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">Vigia — Mensagem padrão</h1>
+        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">Vigia — Acessórias</h1>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Texto enviado ao cliente quando um documento chega pelo Acessórias. Use as variáveis abaixo para personalizar.
+          Monitora e-mails do Acessórias e envia notificações WhatsApp para clientes com opt-in.
         </p>
+      </div>
+
+      {/* Status card */}
+      <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Wifi className="h-4 w-4 text-zinc-400" />
+            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Status do monitoramento</span>
+          </div>
+          {status && <StatusBadge state={status.state} />}
+        </div>
+
+        {status && (
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat label="Última execução" value={formatRelative(status.lastRunAt)} />
+            <Stat label="Processados hoje" value={String(status.emailsProcessedToday)} />
+            <Stat label="Ignorados hoje" value={String(status.emailsSkippedToday)} />
+            <Stat
+              label="Último erro"
+              value={status.lastErrorAt ? formatRelative(status.lastErrorAt) : '—'}
+              highlight={!!status.lastError}
+            />
+          </div>
+        )}
+
+        {status?.lastError && (
+          <div className="mt-3 rounded-md bg-red-50 px-3 py-2 dark:bg-red-900/20">
+            <p className="font-mono text-xs text-red-700 dark:text-red-400 break-all">{status.lastError}</p>
+          </div>
+        )}
+
+        {(status?.state === 'error' || status?.state === 'disconnected') && (
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={() => reconnect.mutate()}
+              disabled={reconnect.isPending}
+              className="inline-flex items-center gap-1.5 rounded-md bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-200 disabled:opacity-50 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+            >
+              {reconnect.isPending
+                ? <Loader2 className="h-3 w-3 animate-spin" />
+                : <RefreshCw className="h-3 w-3" />}
+              Reconectar IMAP
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Variables reference */}
@@ -117,6 +221,17 @@ export default function VigiaSettingsPage() {
           Salvar
         </button>
       </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className="rounded-md bg-zinc-50 px-3 py-2 dark:bg-zinc-800/50">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
+      <p className={`mt-0.5 text-sm font-medium tabular-nums ${highlight ? 'text-red-600 dark:text-red-400' : 'text-zinc-800 dark:text-zinc-200'}`}>
+        {value}
+      </p>
     </div>
   );
 }

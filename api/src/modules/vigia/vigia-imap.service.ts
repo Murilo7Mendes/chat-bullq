@@ -48,6 +48,11 @@ export class VigiaImapService implements OnModuleDestroy {
     return client;
   }
 
+  /** Fecha a conexão atual; o próximo fetchUnseen reconecta automaticamente. */
+  async reconnect(): Promise<void> {
+    await this.safeLogout();
+  }
+
   private async safeLogout() {
     if (this.client) {
       try { await this.client.logout(); } catch { /* ignore */ }
