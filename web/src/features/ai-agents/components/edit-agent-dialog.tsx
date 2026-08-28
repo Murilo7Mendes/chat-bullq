@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Component, useEffect, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Trash2, X, Plus, ShieldCheck, BookOpen, FileText, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -331,7 +331,9 @@ export function EditAgentDialog({
           )}
 
           {agent && (
-            <AgentKnowledgeBase agentId={agent.id} />
+            <KnowledgeBoundary>
+              <AgentKnowledgeBase agentId={agent.id} />
+            </KnowledgeBoundary>
           )}
 
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
@@ -621,6 +623,24 @@ function AgentSkillsAndTools({ agentId }: { agentId: string }) {
       </div>
     </div>
   );
+}
+
+class KnowledgeBoundary extends Component<
+  { children: ReactNode },
+  { error: string | null }
+> {
+  state = { error: null };
+  static getDerivedStateFromError(e: Error) { return { error: e.message }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+          Erro ao carregar base de conhecimento: {this.state.error}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
