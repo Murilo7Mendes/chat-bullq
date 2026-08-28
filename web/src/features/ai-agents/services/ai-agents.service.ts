@@ -364,19 +364,19 @@ export interface AgentStats {
   handoffs: { sent: number; received: number };
 }
 
-export const DEFAULT_AGENT_MODEL = 'sakana/fugu-ultra-20260615';
-export const SIMPLE_TASK_MODEL = 'sakana/fugu';
+export const DEFAULT_AGENT_MODEL = 'claude-sonnet-5';
+export const SIMPLE_TASK_MODEL = 'claude-haiku-4-5-20251001';
 
 export const CURATED_MODELS = [
   {
     id: DEFAULT_AGENT_MODEL,
-    label: 'Sakana Fugu Ultra',
+    label: 'Claude Sonnet 5',
     badge: 'Conversas · máxima qualidade',
     recommendedFor: 'worker',
   },
   {
     id: SIMPLE_TASK_MODEL,
-    label: 'Sakana Fugu',
+    label: 'Claude Haiku 4.5',
     badge: 'Tarefas simples · mais barato',
     recommendedFor: 'orchestrator',
   },
@@ -384,6 +384,7 @@ export const CURATED_MODELS = [
 
 export function formatModelLabel(modelId: string): string {
   return modelId
+    .replace(/^claude-/, 'Claude ')
     .replace(/^sakana\//, '')
     .replace(/^anthropic\//, '')
     .replace(/^openai\//, '')

@@ -21,15 +21,15 @@ export interface UpdateKnowledgeDto {
 
 export const knowledgeService = {
   list(agentId: string): Promise<KnowledgeDocument[]> {
-    return api.get(`/ai/agents/${agentId}/knowledge`).then((r) => r.data);
+    return api.get(`/ai/agents/${agentId}/knowledge`).then((r) => r.data.data ?? r.data);
   },
 
   create(agentId: string, dto: CreateKnowledgeDto): Promise<KnowledgeDocument> {
-    return api.post(`/ai/agents/${agentId}/knowledge`, dto).then((r) => r.data);
+    return api.post(`/ai/agents/${agentId}/knowledge`, dto).then((r) => r.data.data ?? r.data);
   },
 
   update(agentId: string, id: string, dto: UpdateKnowledgeDto): Promise<KnowledgeDocument> {
-    return api.patch(`/ai/agents/${agentId}/knowledge/${id}`, dto).then((r) => r.data);
+    return api.patch(`/ai/agents/${agentId}/knowledge/${id}`, dto).then((r) => r.data.data ?? r.data);
   },
 
   remove(agentId: string, id: string): Promise<void> {

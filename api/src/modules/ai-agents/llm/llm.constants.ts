@@ -1,8 +1,10 @@
-/** Default Sakana model for cheap/simple background LLM tasks. */
-export const SAKANA_SIMPLE_MODEL = 'sakana/fugu';
+/** Claude Haiku — cheap/fast for tool-call iterations. */
+export const CLAUDE_SIMPLE_MODEL = 'claude-haiku-4-5-20251001';
 
-/** Default Sakana model for customer-facing agent conversations. */
-export const SAKANA_CONVERSATION_MODEL = 'sakana/fugu-ultra-20260615';
+/** Claude Sonnet — quality model for customer-facing synthesis. */
+export const CLAUDE_CONVERSATION_MODEL = 'claude-sonnet-5';
 
-/** Default OpenAI-compatible base URL for Sakana's API. */
-export const SAKANA_DEFAULT_BASE_URL = 'https://api.sakana.ai/v1';
+// Legacy aliases kept for backward compat with ModelRouterService imports.
+export const SAKANA_SIMPLE_MODEL = CLAUDE_SIMPLE_MODEL;
+export const SAKANA_CONVERSATION_MODEL = CLAUDE_CONVERSATION_MODEL;
+export const SAKANA_DEFAULT_BASE_URL = 'https://api.anthropic.com';

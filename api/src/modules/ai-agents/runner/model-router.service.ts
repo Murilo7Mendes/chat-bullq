@@ -84,13 +84,18 @@ export class ModelRouterService {
   }
 
   /**
-   * Garante que o modelo é um ID Sakana válido (sakana/* ou fugu*). Qualquer
-   * coisa fora disso (modelId legado de Claude/Anthropic, override quebrado,
-   * vazio) cai no fallback Sakana informado.
+   * Valida e normaliza o ID do modelo. Aceita modelos Claude nativos
+   * (claude-*) e aliases legados Sakana (sakana/fugu, fugu-ultra-*).
+   * IDs inválidos ou vazios caem no fallback informado.
    */
   private toSakana(model: string | undefined | null, fallback: string): string {
     const m = (model ?? '').trim();
-    if (m.startsWith('sakana/') || m === 'fugu' || m.startsWith('fugu-')) {
+    if (
+      m.startsWith('claude-') ||
+      m.startsWith('sakana/') ||
+      m === 'fugu' ||
+      m.startsWith('fugu-')
+    ) {
       return m;
     }
     return fallback;
