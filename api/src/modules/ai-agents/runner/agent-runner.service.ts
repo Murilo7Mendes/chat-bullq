@@ -990,7 +990,32 @@ export class AiAgentRunnerService {
       cache: true,
     };
 
-    // 2) RAG retrieval (não cacheable — varia por turno)
+    // 2) Knowledge base retrieval (não cacheable — documentos FAQ do agente)
+    let knowledgePart: { type: 'text'; text: string; cache: false } | null = null;
+    if (triggerText && triggerText.length >= 10) {
+      try {
+        const kbResults = await this.retrieval.retrieve({
+          query: triggerText,
+          scope: { agentId, ownerType: 'document' },
+          k: 5,
+          minScore: 0.72,
+        });
+        if (kbResults.length > 0) {
+          const lines = kbResults
+            .map((r, i) => `${i + 1}. ${r.entry.content.slice(0, 500)}`)
+            .join('\n\n');
+          knowledgePart = {
+            type: 'text',
+            text: `═══ Base de conhecimento ═══\n${lines}\n\nUse essas informações para responder com precisão. Se a pergunta do cliente se encaixar aqui, priorize estas informações.`,
+            cache: false,
+          };
+        }
+      } catch (err: any) {
+        this.logger.warn(`Knowledge base retrieval failed: ${err?.message ?? err}`);
+      }
+    }
+
+    // 3) RAG retrieval (não cacheable — histórico longo do cliente)
     let ragPart: { type: 'text'; text: string; cache: false } | null = null;
     if (triggerText && triggerText.length >= 10) {
       try {
@@ -1026,6 +1051,7 @@ export class AiAgentRunnerService {
     firstMsg.content = [
       securityPart,
       ...firstMsg.content,
+      ...(knowledgePart ? [knowledgePart] : []),
       ...(ragPart ? [ragPart] : []),
     ];
   }

@@ -196,6 +196,14 @@ export class VectorStoreService {
     );
   }
 
+  async deleteByOwnerPrefix(ownerType: string, ownerIdPrefix: string): Promise<number> {
+    return this.prisma.$executeRawUnsafe(
+      `DELETE FROM ai_vector_entries WHERE owner_type = $1 AND owner_id LIKE $2`,
+      ownerType,
+      `${ownerIdPrefix}%`,
+    );
+  }
+
   /**
    * pgvector accepts both binary and text representations. The text form
    * `'[1,2,3]'::vector` is what the Postgres driver passes through

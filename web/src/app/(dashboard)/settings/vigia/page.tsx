@@ -93,8 +93,7 @@ export default function VigiaSettingsPage() {
   };
 
   const VARS = [
-    { label: '{{assunto}}', desc: 'Assunto do e-mail recebido' },
-    { label: '{{links}}', desc: 'Links do documento formatados' },
+    { label: '{{documentos}}', desc: 'Lista de documentos: nome, competência, vencimento e link' },
   ];
 
   return (
@@ -194,9 +193,10 @@ export default function VigiaSettingsPage() {
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Prévia (exemplo)</p>
           <div className="whitespace-pre-wrap rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
-            {template
-              .replace(/\{\{assunto\}\}/g, 'LUCRON CONTABILIDADE - Financeiro\n- GUIA DARF: 07/2026 - Vencimento: 19/08/2026')
-              .replace(/\{\{links\}\}/g, '«Clique aqui para acessar» → https://app.acessorias.com/getguia.php?ko=exemplo')}
+            {template.replace(
+              /\{\{documentos\}\}/g,
+              'GUIA DARF: 07/2026 - Vencimento em: 19/08/2026\n«Clique aqui para acessar» → https://app.acessorias.com/getguia.php?ko=exemplo1\n\nFGTS: 07/2026\n«Clique aqui para acessar» → https://app.acessorias.com/getguia.php?ko=exemplo2',
+            )}
           </div>
         </div>
       )}

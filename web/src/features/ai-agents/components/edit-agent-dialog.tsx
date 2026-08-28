@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Trash2, X, Plus, ShieldCheck } from 'lucide-react';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { Trash2, X, Plus, ShieldCheck, BookOpen, FileText, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   aiAgentsService,
@@ -13,6 +13,7 @@ import {
   type AgentMode,
 } from '../services/ai-agents.service';
 import { aiCatalogService } from '../services/ai-catalog.service';
+import { knowledgeService, type CreateKnowledgeDto } from '../services/knowledge.service';
 import { channelsService } from '@/features/channels/services/channels.service';
 import { useOrgId } from '@/hooks/use-org-query-key';
 
@@ -329,6 +330,10 @@ export function EditAgentDialog({
             <AgentSkillsAndTools agentId={agent.id} />
           )}
 
+          {agent && (
+            <AgentKnowledgeBase agentId={agent.id} />
+          )}
+
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
@@ -613,6 +618,181 @@ function AgentSkillsAndTools({ agentId }: { agentId: string }) {
             </p>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+const STATUS_BADGE: Record<string, { label: string; className: string }> = {
+  pending:  { label: 'Pendente',   className: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400' },
+  indexing: { label: 'Indexando…', className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+  ready:    { label: 'Pronto',     className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
+  error:    { label: 'Erro',       className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+};
+
+function AgentKnowledgeBase({ agentId }: { agentId: string }) {
+  const queryClient = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [polling, setPolling] = useState(false);
+
+  const { data: docs, isLoading } = useQuery({
+    queryKey: ['ai-knowledge', agentId],
+    queryFn: () => knowledgeService.list(agentId),
+    refetchInterval: polling ? 3000 : false,
+  });
+
+  useEffect(() => {
+    const hasActive = (docs ?? []).some(
+      (d) => d.status === 'pending' || d.status === 'indexing',
+    );
+    setPolling(hasActive);
+  }, [docs]);
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['ai-knowledge', agentId] });
+
+  const createMut = useMutation({
+    mutationFn: (dto: CreateKnowledgeDto) => knowledgeService.create(agentId, dto),
+    onSuccess: () => { toast.success('Documento adicionado'); invalidate(); resetForm(); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Erro ao criar'),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, ...dto }: { id: string; title?: string; content?: string }) =>
+      knowledgeService.update(agentId, id, dto),
+    onSuccess: () => { toast.success('Documento atualizado'); invalidate(); resetForm(); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Erro ao atualizar'),
+  });
+
+  const removeMut = useMutation({
+    mutationFn: (id: string) => knowledgeService.remove(agentId, id),
+    onSuccess: () => { toast.success('Documento removido'); invalidate(); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Erro ao remover'),
+  });
+
+  const resetForm = () => { setShowForm(false); setEditId(null); setTitle(''); setContent(''); };
+
+  const openEdit = (doc: { id: string; title: string }) => {
+    setEditId(doc.id);
+    setTitle(doc.title);
+    setContent('');
+    setShowForm(true);
+  };
+
+  const handleSubmit = () => {
+    if (!title.trim()) return;
+    if (editId) {
+      updateMut.mutate({ id: editId, title: title.trim(), ...(content.trim() ? { content: content.trim() } : {}) });
+    } else {
+      if (!content.trim()) return;
+      createMut.mutate({ title: title.trim(), content: content.trim() });
+    }
+  };
+
+  const isBusy = createMut.isPending || updateMut.isPending;
+
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <BookOpen className="h-4 w-4 text-zinc-500" />
+          <h4 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+            Base de conhecimento ({(docs ?? []).length})
+          </h4>
+        </div>
+        {!showForm && (
+          <button
+            onClick={() => { setEditId(null); setTitle(''); setContent(''); setShowForm(true); }}
+            className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300"
+          >
+            <Plus className="h-3 w-3" /> Adicionar
+          </button>
+        )}
+      </div>
+      <p className="mt-1 text-[11px] text-zinc-500">
+        Documentos FAQ indexados com RAG — o agente consulta automaticamente ao responder.
+      </p>
+
+      {showForm && (
+        <div className="mt-3 space-y-2 rounded-md border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-800">
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Título do documento…"
+            className="w-full rounded border border-zinc-300 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-100"
+          />
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            rows={8}
+            placeholder={editId ? 'Deixe vazio para manter o conteúdo atual…' : 'Conteúdo do documento (prazos, procedimentos, FAQ…)'}
+            className="w-full rounded border border-zinc-300 px-2 py-1.5 font-mono text-xs dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-100"
+          />
+          <div className="flex items-center justify-end gap-2">
+            <button onClick={resetForm} className="text-xs text-zinc-500 hover:text-zinc-700">
+              Cancelar
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={isBusy || !title.trim() || (!editId && !content.trim())}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {isBusy && <Loader2 className="h-3 w-3 animate-spin" />}
+              {editId ? 'Atualizar' : 'Salvar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-3 space-y-2">
+        {isLoading && (
+          <div className="flex items-center gap-2 py-2 text-xs text-zinc-400">
+            <Loader2 className="h-3 w-3 animate-spin" /> Carregando…
+          </div>
+        )}
+        {(docs ?? []).map((doc) => {
+          const badge = STATUS_BADGE[doc.status] ?? STATUS_BADGE.pending;
+          return (
+            <div
+              key={doc.id}
+              className="flex items-center justify-between rounded-md border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800"
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <FileText className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+                <button
+                  onClick={() => openEdit(doc)}
+                  className="truncate text-xs font-medium text-zinc-800 hover:text-primary dark:text-zinc-200"
+                >
+                  {doc.title}
+                </button>
+                <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase ${badge.className}`}>
+                  {badge.label}
+                </span>
+                {doc.status === 'ready' && (
+                  <span className="text-[10px] text-zinc-400">{doc.chunkCount} chunks</span>
+                )}
+                {(doc.status === 'pending' || doc.status === 'indexing') && (
+                  <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                )}
+              </div>
+              <button
+                onClick={() => removeMut.mutate(doc.id)}
+                disabled={removeMut.isPending}
+                className="ml-2 rounded p-1 text-zinc-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          );
+        })}
+        {!isLoading && (docs ?? []).length === 0 && !showForm && (
+          <p className="text-center text-xs text-zinc-400 py-2">
+            Nenhum documento. Adicione um FAQ, tabela de prazos, procedimentos…
+          </p>
+        )}
       </div>
     </div>
   );

@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { DocEntry } from './vigia-link-extractor';
 
 export const VIGIA_DEFAULT_TEMPLATE =
-  '{{assunto}}\nClique no link para acessar o arquivo.\n{{links}}';
+  'Olá! Segue(m) o(s) documento(s) disponibilizado(s) pela sua contabilidade:\n\n{{documentos}}';
 
 const LINK_PREFIX = '«Clique aqui para acessar» → ';
 
@@ -31,11 +32,11 @@ export class VigiaSettingsService {
     });
   }
 
-  /** Aplica o template substituindo {{assunto}} e {{links}}. */
-  applyTemplate(template: string, subject: string, links: string[]): string {
-    const formattedLinks = links.map((l) => `${LINK_PREFIX}${l}`).join('\n');
-    return template
-      .replace(/\{\{assunto\}\}/g, subject)
-      .replace(/\{\{links\}\}/g, formattedLinks);
+  /** Aplica o template substituindo {{documentos}} com cada entrada doc+link. */
+  applyTemplate(template: string, entries: DocEntry[]): string {
+    const formattedDocs = entries
+      .map((e) => `${e.description}\n${LINK_PREFIX}${e.url}`)
+      .join('\n\n');
+    return template.replace(/\{\{documentos\}\}/g, formattedDocs);
   }
 }

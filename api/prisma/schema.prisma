@@ -191,8 +191,9 @@ model Organization {
   notifications Notification[]
   invitations   Invitation[]
   apiKeys       ApiKey[]
-  aiAgents      AiAgent[]
-  aiTools       AiTool[]
+  aiAgents            AiAgent[]
+  aiKnowledgeDocs     AiKnowledgeDocument[]
+  aiTools             AiTool[]
   aiSkills      AiSkill[]
   inboxViews    InboxView[]
   pipelines     Pipeline[]
@@ -995,20 +996,39 @@ model AiAgent {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  channels       AiAgentChannel[]
-  memories       AiAgentMemory[]
-  runs           AiAgentRun[]
-  handoffsFrom   AiAgentHandoff[]  @relation("HandoffFrom")
-  handoffsTo     AiAgentHandoff[]  @relation("HandoffTo")
-  pendingActions AiPendingAction[]
-  activeOn       Conversation[]    @relation("ActiveAgent")
-  skills         AiAgentSkill[]
+  channels            AiAgentChannel[]
+  memories            AiAgentMemory[]
+  runs                AiAgentRun[]
+  handoffsFrom        AiAgentHandoff[]       @relation("HandoffFrom")
+  handoffsTo          AiAgentHandoff[]       @relation("HandoffTo")
+  pendingActions      AiPendingAction[]
+  activeOn            Conversation[]         @relation("ActiveAgent")
+  skills              AiAgentSkill[]
+  knowledgeDocuments  AiKnowledgeDocument[]
 
   @@index([organizationId], name: "idx_ai_agent_org")
   @@index([organizationId, kind], name: "idx_ai_agent_org_kind")
   @@index([parentAgentId], name: "idx_ai_agent_parent")
   @@index([organizationId, department], name: "idx_ai_agent_org_dept")
   @@map("ai_agents")
+}
+
+model AiKnowledgeDocument {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  agentId        String   @map("agent_id")
+  title          String
+  content        String   @db.Text
+  chunkCount     Int      @default(0) @map("chunk_count")
+  status         String   @default("pending")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agent        AiAgent      @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId], name: "idx_knowledge_agent")
+  @@map("ai_knowledge_documents")
 }
 
 // ─── Tools (built-in registry + custom HTTP) ─────────────────

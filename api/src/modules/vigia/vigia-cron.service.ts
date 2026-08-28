@@ -8,7 +8,7 @@ import { VigiaImapService } from './vigia-imap.service';
 import { VigiaDispatchService } from './vigia-dispatch.service';
 import { VigiaSettingsService } from './vigia-settings.service';
 import { VigiaStatusService, VigiaStatus } from './vigia-status.service';
-import { extractCnpjFromHtml, extractDocLinks } from './vigia-link-extractor';
+import { extractCnpjFromHtml, extractDocEntries } from './vigia-link-extractor';
 import {
   VIGIA_QUEUE,
   VIGIA_POLL_JOB,
@@ -116,9 +116,9 @@ export class VigiaCronService extends WorkerHost implements OnModuleInit, OnModu
         continue;
       }
 
-      const links = extractDocLinks(email.html);
+      const entries = extractDocEntries(email.html);
 
-      if (links.length === 0) {
+      if (entries.length === 0) {
         this.logger.debug(`vigia: sem links no email ${email.messageId} — ignorado`);
         skipped++;
         await this.markProcessed(dedupKey);
@@ -143,7 +143,7 @@ export class VigiaCronService extends WorkerHost implements OnModuleInit, OnModu
       }
 
       const template = await this.settings.getTemplate(channel.organizationId);
-      const text = this.settings.applyTemplate(template, email.subject, links);
+      const text = this.settings.applyTemplate(template, entries);
 
       // Espaça disparos para anti-ban (1 s entre contatos do mesmo e-mail)
       for (const cc of contactCnpjs) {
@@ -169,7 +169,7 @@ export class VigiaCronService extends WorkerHost implements OnModuleInit, OnModu
       await this.markProcessed(dedupKey);
       processed++;
       this.logger.log(
-        `vigia: processado CNPJ=${cnpj} links=${links.length} contatos=${contactCnpjs.length}`,
+        `vigia: processado CNPJ=${cnpj} docs=${entries.length} contatos=${contactCnpjs.length}`,
       );
     }
 

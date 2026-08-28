@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { EmbeddingsService } from './embeddings.service';
 import { VectorStoreService } from './vector-store.service';
+import { PrismaService } from '../../../database/prisma.service';
 import type { IndexerJobData, SearchScope, VectorEntry, VectorOwnerType } from './types';
 
 /**
@@ -23,6 +24,7 @@ export class RagIndexerProcessor extends WorkerHost {
   constructor(
     private readonly embeddings: EmbeddingsService,
     private readonly store: VectorStoreService,
+    private readonly prisma: PrismaService,
   ) {
     super();
   }
@@ -50,6 +52,10 @@ export class RagIndexerProcessor extends WorkerHost {
           );
           return { ok: true };
 
+        case 'index_document':
+          await this.indexDocument(data.docId, data.agentId, data.organizationId, data.chunks);
+          return { ok: true };
+
         case 'delete_entry':
           await this.store.delete(data.id);
           this.logger.log(`rag_indexer_deleted id=${data.id}`);
@@ -68,6 +74,71 @@ export class RagIndexerProcessor extends WorkerHost {
       // configured backoff. We don't want to swallow embedding outages.
       throw err;
     }
+  }
+
+  private async indexDocument(
+    docId: string,
+    agentId: string,
+    organizationId: string,
+    chunks: { content: string; index: number }[],
+  ): Promise<void> {
+    // Marca indexando
+    await this.prisma.aiKnowledgeDocument.update({
+      where: { id: docId },
+      data: { status: 'indexing' },
+    });
+
+    // Remove chunks antigos
+    const deleted = await this.store.deleteByOwnerPrefix('document', `${docId}:chunk:`);
+    if (deleted > 0) {
+      this.logger.log(`rag_indexer_doc_chunks_cleared docId=${docId} deleted=${deleted}`);
+    }
+
+    if (chunks.length === 0) {
+      await this.prisma.aiKnowledgeDocument.update({
+        where: { id: docId },
+        data: { status: 'ready', chunkCount: 0 },
+      });
+      return;
+    }
+
+    // Gera embeddings em batch (1 chamada à OpenAI)
+    const embedResults = await this.embeddings.embedBatch(chunks.map((c) => c.content));
+
+    const now = new Date().toISOString();
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const emb = embedResults[i];
+      const ownerId = `${docId}:chunk:${chunk.index}`;
+      const entry: VectorEntry = {
+        id: `document:${ownerId}`,
+        ownerType: 'document',
+        ownerId,
+        agentId,
+        content: chunk.content,
+        embedding: emb.vector,
+        metadata: {
+          docId,
+          organizationId,
+          chunkIndex: chunk.index,
+          embeddingModel: emb.model,
+          embeddingTokens: emb.tokensUsed,
+        },
+        createdAt: now,
+      };
+      await this.store.upsert(entry);
+    }
+
+    await this.prisma.aiKnowledgeDocument.update({
+      where: { id: docId },
+      data: { status: 'ready', chunkCount: chunks.length },
+    });
+
+    const totalTokens = embedResults.reduce((s, r) => s + r.tokensUsed, 0);
+    const totalCost = embedResults.reduce((s, r) => s + r.costUsd, 0);
+    this.logger.log(
+      `rag_indexed_document docId=${docId} chunks=${chunks.length} tokens=${totalTokens} costUsd=${totalCost.toFixed(6)}`,
+    );
   }
 
   private async index(
