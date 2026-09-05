@@ -23,6 +23,16 @@ export class KnowledgeController {
     return this.service.list(orgId, agentId);
   }
 
+  @Get(':id')
+  @ApiOperation({ summary: 'Get a knowledge document (with content)' })
+  findOne(
+    @CurrentOrg('id') orgId: string,
+    @Param('agentId') agentId: string,
+    @Param('id') id: string,
+  ) {
+    return this.service.findOne(orgId, agentId, id);
+  }
+
   @Post()
   @Roles(OrgRole.OWNER, OrgRole.ADMIN)
   @ApiOperation({ summary: 'Create a knowledge document' })

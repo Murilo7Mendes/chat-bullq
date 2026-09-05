@@ -656,6 +656,7 @@ function AgentKnowledgeBase({ agentId }: { agentId: string }) {
   const [editId, setEditId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [loadingContent, setLoadingContent] = useState(false);
   const [polling, setPolling] = useState(false);
 
   const { data: docs, isLoading } = useQuery({
@@ -694,11 +695,20 @@ function AgentKnowledgeBase({ agentId }: { agentId: string }) {
 
   const resetForm = () => { setShowForm(false); setEditId(null); setTitle(''); setContent(''); };
 
-  const openEdit = (doc: { id: string; title: string }) => {
+  const openEdit = async (doc: { id: string; title: string }) => {
     setEditId(doc.id);
     setTitle(doc.title);
     setContent('');
     setShowForm(true);
+    setLoadingContent(true);
+    try {
+      const full = await knowledgeService.findOne(agentId, doc.id);
+      setContent(full.content ?? '');
+    } catch {
+      // mantém vazio; o PATCH aceita sem content
+    } finally {
+      setLoadingContent(false);
+    }
   };
 
   const handleSubmit = () => {
@@ -711,7 +721,7 @@ function AgentKnowledgeBase({ agentId }: { agentId: string }) {
     }
   };
 
-  const isBusy = createMut.isPending || updateMut.isPending;
+  const isBusy = createMut.isPending || updateMut.isPending || loadingContent;
 
   return (
     <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
@@ -744,13 +754,21 @@ function AgentKnowledgeBase({ agentId }: { agentId: string }) {
             placeholder="Título do documento…"
             className="w-full rounded border border-zinc-300 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-100"
           />
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            rows={8}
-            placeholder={editId ? 'Deixe vazio para manter o conteúdo atual…' : 'Conteúdo do documento (prazos, procedimentos, FAQ…)'}
-            className="w-full rounded border border-zinc-300 px-2 py-1.5 font-mono text-xs dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-100"
-          />
+          <div className="relative">
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              rows={8}
+              disabled={loadingContent}
+              placeholder="Conteúdo do documento (prazos, procedimentos, FAQ…)"
+              className="w-full rounded border border-zinc-300 px-2 py-1.5 font-mono text-xs dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-100 disabled:opacity-50"
+            />
+            {loadingContent && (
+              <div className="absolute inset-0 flex items-center justify-center rounded bg-white/60 dark:bg-zinc-800/60">
+                <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
+              </div>
+            )}
+          </div>
           <div className="flex items-center justify-end gap-2">
             <button onClick={resetForm} className="text-xs text-zinc-500 hover:text-zinc-700">
               Cancelar

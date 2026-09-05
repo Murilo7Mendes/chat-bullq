@@ -16,6 +16,13 @@ export class KnowledgeService {
     @InjectQueue('rag-indexer') private readonly indexerQueue: Queue<IndexerJobData>,
   ) {}
 
+  async findOne(orgId: string, agentId: string, id: string) {
+    await this.assertDocOwnership(orgId, agentId, id);
+    const doc = await this.prisma.aiKnowledgeDocument.findUnique({ where: { id } });
+    if (!doc) throw new NotFoundException('Document not found');
+    return doc;
+  }
+
   async list(orgId: string, agentId: string) {
     await this.assertAgentOwnership(orgId, agentId);
     return this.prisma.aiKnowledgeDocument.findMany({

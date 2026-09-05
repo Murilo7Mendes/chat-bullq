@@ -3,6 +3,7 @@ import { api } from '@/lib/api';
 export interface KnowledgeDocument {
   id: string;
   title: string;
+  content?: string;
   status: 'pending' | 'indexing' | 'ready' | 'error';
   chunkCount: number;
   createdAt: string;
@@ -22,6 +23,10 @@ export interface UpdateKnowledgeDto {
 export const knowledgeService = {
   list(agentId: string): Promise<KnowledgeDocument[]> {
     return api.get(`/ai/agents/${agentId}/knowledge`).then((r) => r.data.data ?? r.data);
+  },
+
+  findOne(agentId: string, id: string): Promise<KnowledgeDocument> {
+    return api.get(`/ai/agents/${agentId}/knowledge/${id}`).then((r) => r.data.data ?? r.data);
   },
 
   create(agentId: string, dto: CreateKnowledgeDto): Promise<KnowledgeDocument> {
