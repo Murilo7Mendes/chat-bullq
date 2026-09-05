@@ -44,8 +44,10 @@ const MAX_RECENT_MESSAGES = 30;
  * Acima desta confiança, mensagens classificadas como SPAM_OR_NOISE são
  * ignoradas sem rodar nenhum agente (o classifier barato já decidiu). Antes
  * isso caía no Augusto (orquestrador caro) só pra ele mandar transferToHuman.
+ * Definido como 1.0 para desabilitar o skip enquanto o prompt do classifier
+ * não está calibrado para o negócio atual.
  */
-const SPAM_SKIP_CONFIDENCE = 0.8;
+const SPAM_SKIP_CONFIDENCE = 1.0;
 
 /**
  * Tools that signal "agent is preparing to sell": pulled product info,
