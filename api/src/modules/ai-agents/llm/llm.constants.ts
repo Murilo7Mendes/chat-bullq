@@ -2,7 +2,7 @@
 export const CLAUDE_SIMPLE_MODEL = 'claude-haiku-4-5-20251001';
 
 /** Claude Sonnet — quality model for customer-facing synthesis. */
-export const CLAUDE_CONVERSATION_MODEL = 'claude-sonnet-5';
+export const CLAUDE_CONVERSATION_MODEL = 'claude-sonnet-4-6';
 
 // Legacy aliases kept for backward compat with ModelRouterService imports.
 export const SAKANA_SIMPLE_MODEL = CLAUDE_SIMPLE_MODEL;

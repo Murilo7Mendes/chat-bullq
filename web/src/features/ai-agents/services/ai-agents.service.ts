@@ -364,13 +364,13 @@ export interface AgentStats {
   handoffs: { sent: number; received: number };
 }
 
-export const DEFAULT_AGENT_MODEL = 'claude-sonnet-5';
+export const DEFAULT_AGENT_MODEL = 'claude-sonnet-4-6';
 export const SIMPLE_TASK_MODEL = 'claude-haiku-4-5-20251001';
 
 export const CURATED_MODELS = [
   {
     id: DEFAULT_AGENT_MODEL,
-    label: 'Claude Sonnet 5',
+    label: 'Claude Sonnet 4.6',
     badge: 'Conversas · máxima qualidade',
     recommendedFor: 'worker',
   },
